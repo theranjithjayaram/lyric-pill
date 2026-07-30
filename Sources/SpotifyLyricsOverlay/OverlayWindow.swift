@@ -22,9 +22,9 @@ final class OverlayWindow {
     private var center: CGPoint
     private var moveObserver: NSObjectProtocol?
 
-    private static let font = NSFont.systemFont(ofSize: 24, weight: .semibold)
-    private static let hPad: CGFloat = 18
-    private static let vPad: CGFloat = 9
+    private static let font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+    private static let hPad: CGFloat = 16
+    private static let vPad: CGFloat = 8
     private static let bottomOffset: CGFloat = 120
 
     init(savedCenter: CGPoint?) {
@@ -117,8 +117,13 @@ final class OverlayWindow {
     private func layoutToFit() {
         guard let screen = targetScreen() else { return }
         let visible = screen.visibleFrame
-        var textSize = label.attributedStringValue.size()
-        textSize.width = min(ceil(textSize.width) + 2, visible.width * 0.8 - 2 * Self.hPad)
+        // Size from the cell's own metric: NSAttributedString.size() (and even
+        // intrinsicContentSize) come up a few px short of what the cell needs,
+        // and any shortfall makes byTruncatingTail ellipsize every line.
+        let unbounded = NSRect(x: 0, y: 0, width: 100_000, height: 1000)
+        var textSize = label.cell?.cellSize(forBounds: unbounded)
+            ?? label.attributedStringValue.size()
+        textSize.width = min(ceil(textSize.width) + 1, visible.width * 0.8 - 2 * Self.hPad)
         textSize.height = ceil(textSize.height)
 
         let size = NSSize(width: textSize.width + 2 * Self.hPad,
