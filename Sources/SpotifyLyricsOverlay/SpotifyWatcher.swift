@@ -26,17 +26,19 @@ final class SpotifyWatcher {
     // text) so locale decimal separators can never corrupt the position.
     // `player position` is seconds (real); `duration` is milliseconds (int) —
     // that mismatch is a Spotify AppleScript quirk, normalized in refresh().
+    // NB: `st` is not a usable variable name — AppleScript reserves it as the
+    // ordinal suffix (1st), and the compile error surfaces only at runtime.
     private let script = NSAppleScript(source: """
         tell application "Spotify"
-            set st to 0
+            set stateFlag to 0
             set pos to 0
             try
-                if player state is playing then set st to 1
+                if player state is playing then set stateFlag to 1
                 set pos to player position
                 set t to current track
-                return {st, pos, id of t, name of t, artist of t, album of t, duration of t}
+                return {stateFlag, pos, id of t, name of t, artist of t, album of t, duration of t}
             on error
-                return {st, pos, "", "", "", "", 0}
+                return {stateFlag, pos, "", "", "", "", 0}
             end try
         end tell
         """)!
