@@ -27,7 +27,10 @@ Spotify ──"PlaybackStateChanged" distributed notification──► menu-bar 
   AppleScript interface).
 - **Lyrics** — fetched from [lrclib.net](https://lrclib.net) (artist + title + album + duration),
   parsed from LRC, cached on disk under `~/Library/Caches/spotify-lyrics-overlay/`.
-  Misses are cached too; transient network failures are not, so offline plays retry later.
+  Exact lookup, then a search fallback, then a last-resort search with annotation suffixes
+  (`(From "Movie")`, `(feat. X)`, …) stripped — duration-gated so the wrong song can't match.
+  Misses are cached for 24 h (new releases gain lyrics on lrclib over time); if lrclib is
+  unreachable the app retries with backoff while the track plays and never caches the failure.
 - **Timing** — playback position is interpolated with a monotonic clock between samples and
   re-synced every 10 s while playing.
 
@@ -75,7 +78,8 @@ Click the **♫ icon** in the menu bar:
 | Overlay never appears | Menu-bar ♫ → status row. `Auto` mode + track without synced lyrics = hidden (expected). |
 | Status says Apple events failed | System Settings → Privacy & Security → **Automation** → Spotify Lyrics Overlay → allow Spotify. |
 | No menu-bar icon | `launchctl list \| grep spotify-lyrics` — rerun `./install.sh`. |
-| One song shows nothing | That track has no synced lyrics on lrclib (cached; overlay stays hidden). |
+| One song shows nothing | That track has no synced lyrics on lrclib (cached for 24 h; overlay stays hidden). |
+| Every song shows nothing | Menu status row says "lrclib.net unreachable"? The lyrics service is down — the app retries automatically. |
 | Stale lyrics suspected | `rm -rf ~/Library/Caches/spotify-lyrics-overlay/` |
 
 ## Uninstall

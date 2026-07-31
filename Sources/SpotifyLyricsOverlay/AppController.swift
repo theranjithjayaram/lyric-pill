@@ -22,16 +22,22 @@ final class AppController {
     private var playing = false
     private var hasLyrics = false
     private var fetching = false
+    private var serviceUnreachable = false
     private var currentTrackId = ""
+    private var currentSnapshot: SpotifyWatcher.Snapshot?
     // Bumped per track so an in-flight fetch for a previous track is ignored.
     private var trackGen = 0
 
     private var lineTimer: Timer?    // one-shot, fires at the next line boundary
     private var resyncTimer: Timer?  // repeating, only while playing
+    private var retryTimer: Timer?   // one-shot backoff, only after a failed fetch
+    private var retryDelay: TimeInterval = AppController.retryBaseDelay
 
     private let simulateLrcPath: String?
 
     private static let resyncInterval: TimeInterval = 10
+    private static let retryBaseDelay: TimeInterval = 20
+    private static let retryMaxDelay: TimeInterval = 300
 
     init(simulateLrcPath: String?) {
         self.simulateLrcPath = simulateLrcPath
@@ -75,6 +81,7 @@ final class AppController {
     // MARK: - Spotify events
 
     private func apply(_ snapshot: SpotifyWatcher.Snapshot) {
+        currentSnapshot = snapshot
         if snapshot.trackId != currentTrackId {
             currentTrackId = snapshot.trackId
             startLyricsFetch(for: snapshot)
@@ -82,6 +89,11 @@ final class AppController {
         playing = snapshot.playing
         engine.seek(toMs: snapshot.positionMs)
         engine.setPlaying(snapshot.playing)
+        // A resume can arrive while a service-down retry sits cancelled (we
+        // don't retry while paused) — re-arm it.
+        if playing, serviceUnreachable, !fetching, retryTimer == nil {
+            scheduleLyricsRetry()
+        }
         updateTimers()
         render()
     }
@@ -90,7 +102,11 @@ final class AppController {
         playing = false
         hasLyrics = false
         fetching = false
+        serviceUnreachable = false
         currentTrackId = ""
+        currentSnapshot = nil
+        retryTimer?.invalidate()
+        retryTimer = nil
         engine.setLines([])
         engine.setPlaying(false)
         updateTimers()
@@ -102,38 +118,74 @@ final class AppController {
     private func startLyricsFetch(for snapshot: SpotifyWatcher.Snapshot) {
         trackGen += 1
         hasLyrics = false
+        serviceUnreachable = false
+        retryTimer?.invalidate()
+        retryTimer = nil
+        retryDelay = Self.retryBaseDelay
         engine.setLines([])
         guard !snapshot.trackId.isEmpty, !snapshot.title.isEmpty else {
             fetching = false
             return
         }
+        dispatchFetch(gen: trackGen, snapshot: snapshot)
+    }
+
+    private func dispatchFetch(gen: Int, snapshot: SpotifyWatcher.Snapshot) {
         fetching = true
-        let gen = trackGen
         fetchQueue.async { [weak self] in
             guard let self else { return }
-            let lrc = self.lrclib.getSynced(
+            let outcome = self.lrclib.getSynced(
                 artist: snapshot.artist, title: snapshot.title,
                 album: snapshot.album, durationS: snapshot.durationMs / 1000)
             DispatchQueue.main.async {
-                self.applyLyrics(gen: gen, lrc: lrc)
+                self.applyLyrics(gen: gen, outcome: outcome)
             }
         }
     }
 
-    private func applyLyrics(gen: Int, lrc: String?) {
+    private func applyLyrics(gen: Int, outcome: LyricsOutcome) {
         guard gen == trackGen else { return }  // a newer track superseded this fetch
         fetching = false
-        if let lrc {
+        switch outcome {
+        case .found(let lrc):
             engine.setLines(LrcParser.parse(lrc))
             hasLyrics = true
-        } else {
+            serviceUnreachable = false
+        case .none:
             engine.setLines([])
             hasLyrics = false
+            serviceUnreachable = false
+        case .unavailable:
+            engine.setLines([])
+            hasLyrics = false
+            serviceUnreachable = true
+            if playing {
+                scheduleLyricsRetry()
+            }
         }
         // Re-sync position now that lyrics are ready (covers the fetch delay).
         watcher.refresh()
         updateTimers()
         render()
+    }
+
+    /// lrclib being down must not blank the whole song: back off and retry
+    /// while this track keeps playing. Paused/stopped ⇒ no timer (idle
+    /// discipline holds); apply() re-arms the retry on resume.
+    private func scheduleLyricsRetry() {
+        retryTimer?.invalidate()
+        let gen = trackGen
+        let timer = Timer(timeInterval: retryDelay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.retryTimer = nil
+            guard gen == self.trackGen, self.playing, self.serviceUnreachable,
+                  let snapshot = self.currentSnapshot else { return }
+            self.retryDelay = min(self.retryDelay * 2, Self.retryMaxDelay)
+            self.dispatchFetch(gen: gen, snapshot: snapshot)
+        }
+        timer.tolerance = 5
+        RunLoop.main.add(timer, forMode: .common)
+        retryTimer = timer
     }
 
     // MARK: - Scheduling
@@ -201,6 +253,7 @@ final class AppController {
         if let error = watcher.lastError { return "Spotify: \(error)" }
         if currentTrackId.isEmpty { return "Nothing playing" }
         if fetching { return "Fetching lyrics…" }
+        if serviceUnreachable { return "Lyrics service (lrclib.net) unreachable — retrying" }
         if !hasLyrics { return "No synced lyrics for this track" }
         return playing ? "Showing synced lyrics" : "Paused"
     }

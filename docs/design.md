@@ -39,8 +39,12 @@ Result: the two-process daemon + extension design collapses into **one small App
 ## Deviations from the reference implementation
 
 - **Units**: engine works in ms (AppleScript gives seconds) instead of MPRIS µs.
-- **Transient network failures are not cached** as misses — a track first played offline
-  retries next time. (The original cached them permanently.)
+- **Transient network failures are not cached** as misses — the client returns a distinct
+  `.unavailable` outcome and the app retries with backoff (20 s doubling to 5 min) while the
+  track plays. (The original cached them permanently.)
+- **Cached misses expire after 24 h** so fresh releases get re-checked once lrclib catches up.
+- **Cleaned-title last-resort search**: annotation suffixes (`(From "Movie")`, `(feat. X)`,
+  remaster tags) are stripped and the artist filter dropped, gated to ±10 s duration.
 - **`nextBoundaryMs()`** added to the timing engine so the app can sleep until exactly the
   next line change instead of ticking at 150 ms.
 - **Overlay anchoring**: persisted point is the pill's *center*, so lines of different width
