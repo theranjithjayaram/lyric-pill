@@ -39,9 +39,10 @@ Result: the two-process daemon + extension design collapses into **one small App
 ## Deviations from the reference implementation
 
 - **Units**: engine works in ms (AppleScript gives seconds) instead of MPRIS µs.
-- **Transient network failures are not cached** as misses — the client returns a distinct
-  `.unavailable` outcome and the app retries with backoff (20 s doubling to 5 min) while the
-  track plays. (The original cached them permanently.)
+- **Transient failures (network errors, 5xx) are not cached** as misses — the client returns
+  a distinct `.unavailable` outcome, shown in the menu as "Lyrics server unreachable". No retry
+  loop by design: the affected song goes without lyrics and the next track fetches fresh.
+  (The original cached failures permanently.)
 - **Cached misses expire after 24 h** so fresh releases get re-checked once lrclib catches up.
 - **Cleaned-title last-resort search**: annotation suffixes (`(From "Movie")`, `(feat. X)`,
   remaster tags) are stripped and the artist filter dropped, gated to ±10 s duration.

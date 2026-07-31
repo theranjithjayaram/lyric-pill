@@ -144,7 +144,10 @@ public final class LrclibClient {
         ]
         do {
             let (status, body) = try httpGet(comps.url!)
-            guard status == 200, !body.isEmpty else { return .miss }
+            // Only 404 means "lrclib has no such track". 5xx et al. are outages
+            // and must surface as .abort so they are never cached as misses.
+            if status == 404 { return .miss }
+            guard status == 200, !body.isEmpty else { return .abort }
             guard let obj = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any]
             else { return .abort }
             if let lrc = obj["syncedLyrics"] as? String, !lrc.isEmpty { return .found(lrc) }
@@ -166,7 +169,8 @@ public final class LrclibClient {
         comps.queryItems = query
         do {
             let (status, body) = try httpGet(comps.url!)
-            guard status == 200, !body.isEmpty else { return .miss }
+            if status == 404 { return .miss }
+            guard status == 200, !body.isEmpty else { return .abort }
             guard let items = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [[String: Any]]
             else { return .abort }
             var candidates = items.compactMap { item -> (lrc: String, duration: Int)? in

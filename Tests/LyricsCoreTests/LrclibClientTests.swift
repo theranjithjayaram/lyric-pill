@@ -104,6 +104,23 @@ func lrclibClientTests(_ t: TestReporter) {
     }
 
     do {
+        // A 5xx (outage/gateway error) means "server unreachable", never
+        // "no lyrics" — no fallback requests, and nothing cached.
+        let http = FakeHttp([(502, "bad gateway"), (503, "")], reporter: t)
+        withClient(http.get) { client, _ in
+            t.expect(
+                client.getSynced(artist: "A", title: "S", album: "Al", durationS: 200)
+                    == .unavailable,
+                "lrclib: 5xx returns .unavailable")
+            t.expect(
+                client.getSynced(artist: "A", title: "S", album: "Al", durationS: 200)
+                    == .unavailable,
+                "lrclib: 5xx is not cached — asks again next time")
+            t.expect(http.urls.count == 2, "lrclib: 5xx makes no fallback requests")
+        }
+    }
+
+    do {
         let http = FakeHttp([(200, #"{"syncedLyrics": "[00:01.00] cached"}"#)], reporter: t)
         withClient(http.get) { client, _ in
             let first = client.getSynced(artist: "A", title: "S", album: "Al", durationS: 200)
