@@ -187,7 +187,7 @@ final class AppController {
         let cachePath = cacheDir.appendingPathComponent(
             LrclibClient.cacheDigest(currentFetchKey + "|hi-en") + ".lrc")
         if let cached = try? String(contentsOf: cachePath, encoding: .utf8), !cached.isEmpty {
-            engine.setLines(LrcParser.parse(cached))
+            engine.setLines(Self.markTranslated(LrcParser.parse(cached)))
             updateTimers()
             render()
             return
@@ -198,12 +198,19 @@ final class AppController {
         translator.translate(lines: lines.map(\.text)) { [weak self] translated in
             guard let self, gen == self.trackGen, let translated else { return }
             let translatedLines = zip(lines, translated).map { LrcLine(ms: $0.ms, text: $1) }
-            self.engine.setLines(translatedLines)
+            self.engine.setLines(Self.markTranslated(translatedLines))
+            // Cache stays unmarked — the marker is display-only.
             try? Data(LrcParser.serialize(translatedLines).utf8)
                 .write(to: cachePath, options: .atomic)
             self.updateTimers()
             self.render()
         }
+    }
+
+    /// Monochrome marker so the user can tell translated lines from lrclib
+    /// originals at a glance; interlude (empty) lines stay unmarked.
+    private static func markTranslated(_ lines: [LrcLine]) -> [LrcLine] {
+        lines.map { $0.text.isEmpty ? $0 : LrcLine(ms: $0.ms, text: "⇄ " + $0.text) }
     }
 
     // MARK: - Scheduling

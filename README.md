@@ -37,7 +37,8 @@ Spotify ──"PlaybackStateChanged" distributed notification──► menu-bar 
 - **Hindi translation (optional, macOS 15+)** — when fetched lyrics are written in Devanagari
   script, they're translated to English **on-device** via Apple's Translation framework (one-time
   system language-pack download; zero network per song, result cached to disk). Romanized Hindi,
-  English uploads, and other languages are shown as-is. Toggle: menu → "Translate Hindi → English".
+  English uploads, and other languages are shown as-is. Translated lines are prefixed with a
+  monochrome "⇄" marker. Toggle: menu → "Translate Hindi → English".
 
 ### Designed to be weightless
 
