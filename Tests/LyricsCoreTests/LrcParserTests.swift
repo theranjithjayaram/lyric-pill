@@ -38,4 +38,27 @@ func lrcParserTests(_ t: TestReporter) {
         "parser: empty text line preserved")
 
     t.expect(LrcParser.parse("") == [], "parser: empty input")
+
+    t.expect(
+        LrcParser.parse("[00:12.00] hello\r\n[00:10.50] world\r\n") == [
+            LrcLine(ms: 10500, text: "world"),
+            LrcLine(ms: 12000, text: "hello"),
+        ],
+        "parser: CRLF line endings split correctly")
+
+    t.expect(
+        LrcParser.parse("[00:01.00] a\r[00:02.00] b") == [
+            LrcLine(ms: 1000, text: "a"),
+            LrcLine(ms: 2000, text: "b"),
+        ],
+        "parser: CR-only line endings split correctly")
+
+    // Bilingual uploads: same timestamp twice (original + translation). File
+    // order must be preserved so the engine lands on the second (translated) line.
+    t.expect(
+        LrcParser.parse("[00:09.05] tujh bin suraj\r\n[00:09.05] Without you, no sun\r\n") == [
+            LrcLine(ms: 9050, text: "tujh bin suraj"),
+            LrcLine(ms: 9050, text: "Without you, no sun"),
+        ],
+        "parser: duplicate-timestamp bilingual pairs keep order")
 }

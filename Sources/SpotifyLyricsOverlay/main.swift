@@ -1,4 +1,5 @@
 import AppKit
+import LyricsCore
 
 // Single-instance guard: the LaunchAgent and a manual `open` must not stack.
 if let bundleId = Bundle.main.bundleIdentifier {
@@ -7,6 +8,21 @@ if let bundleId = Bundle.main.bundleIdentifier {
     if !others.isEmpty {
         exit(0)
     }
+}
+
+// Debug: print the engine's selected line at fixed positions for an LRC file.
+if let flag = CommandLine.arguments.firstIndex(of: "--engine-check"),
+   flag + 1 < CommandLine.arguments.count {
+    let text = (try? String(contentsOfFile: CommandLine.arguments[flag + 1], encoding: .utf8)) ?? ""
+    let lines = LrcParser.parse(text)
+    print("parsed \(lines.count) lines; first ms: \(lines.first?.ms ?? -1), last ms: \(lines.last?.ms ?? -1)")
+    let engine = TimingEngine()
+    engine.setLines(lines)
+    for second in [1, 5, 10, 14, 18, 22, 61, 240] {
+        engine.seek(toMs: second * 1000)
+        print("t=\(second)s -> [\(engine.currentIndex())] \(engine.currentText())")
+    }
+    exit(0)
 }
 
 if let flag = CommandLine.arguments.firstIndex(of: "--translate-check"),

@@ -22,14 +22,17 @@ public enum LrcParser {
     /// - Metadata tags ([ar:], [length:], etc.) and malformed lines are skipped.
     public static func parse(_ text: String) -> [LrcLine] {
         var out: [LrcLine] = []
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        // Split on every newline form. NB: "\r\n" is a single grapheme in
+        // Swift, so split(separator: "\n") silently fails to split CRLF files
+        // (lrclib content arrives with whatever endings the uploader used).
+        for rawLine in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             let line = String(rawLine)
             let stamps = timestamp.matches(
                 in: line, range: NSRange(line.startIndex..., in: line))
             guard let last = stamps.last else { continue }
             // Lyric text is whatever follows the final timestamp.
             let lyricStart = Range(last.range, in: line)!.upperBound
-            let lyric = String(line[lyricStart...]).trimmingCharacters(in: .whitespaces)
+            let lyric = String(line[lyricStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
             for match in stamps {
                 let minutes = Int(line[Range(match.range(at: 1), in: line)!])!
                 let seconds = Int(line[Range(match.range(at: 2), in: line)!])!
