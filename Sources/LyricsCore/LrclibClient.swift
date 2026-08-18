@@ -194,13 +194,17 @@ public final class LrclibClient {
         }
     }
 
+    // Ephemeral: no CFNetwork disk cache / cookie store — the lyric cache
+    // above is the only persistence this client needs.
+    private static let session = URLSession(configuration: .ephemeral)
+
     /// Synchronous URLSession wrapper — only ever called on a background queue.
     public static func defaultHttpGet(_ url: URL) throws -> (status: Int, body: String) {
         var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<(status: Int, body: String), Error> = .failure(URLError(.unknown))
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        session.dataTask(with: request) { data, response, error in
             if let error {
                 result = .failure(error)
             } else if let http = response as? HTTPURLResponse {
