@@ -16,4 +16,19 @@ public enum ScriptDetector {
         }
         return letters > 0 && devanagari * 10 >= letters * 3
     }
+
+    /// True when the text's letters are predominantly Latin — used to verify
+    /// a translation actually came back as English rather than model garbage
+    /// (the hi→en model emits mangled output for scripts it can't read).
+    public static func isMostlyLatin(_ text: String) -> Bool {
+        var latin = 0
+        var letters = 0
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            letters += 1
+            if scalar.value < 0x0250 {
+                latin += 1
+            }
+        }
+        return letters > 0 && latin * 10 >= letters * 7
+    }
 }

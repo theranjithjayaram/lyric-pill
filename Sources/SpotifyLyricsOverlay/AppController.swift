@@ -181,36 +181,43 @@ final class AppController {
 
     private func translateIfNeeded(gen: Int, lines: [LrcLine]) {
         guard Settings.translateHindi, #available(macOS 15.0, *) else { return }
-        guard ScriptDetector.isMostlyDevanagari(lines.map(\.text).joined(separator: " "))
-        else { return }
+        // Per-line gate: uploads mix scripts (e.g. Hindi verses in Devanagari
+        // with Punjabi hook lines in Gurmukhi) — only lines that are
+        // individually Devanagari go to the hi→en model.
+        let devanagariIndices = lines.indices.filter {
+            ScriptDetector.isMostlyDevanagari(lines[$0].text)
+        }
+        guard !devanagariIndices.isEmpty else { return }
 
+        // v2: display lines (with ⇄ markers baked in) — v1 cached raw model
+        // output unvalidated, so poisoned entries are simply abandoned.
         let cachePath = cacheDir.appendingPathComponent(
-            LrclibClient.cacheDigest(currentFetchKey + "|hi-en") + ".lrc")
+            LrclibClient.cacheDigest(currentFetchKey + "|hi-en-v2") + ".lrc")
         if let cached = try? String(contentsOf: cachePath, encoding: .utf8), !cached.isEmpty {
-            engine.setLines(Self.markTranslated(LrcParser.parse(cached)))
+            engine.setLines(LrcParser.parse(cached))
             updateTimers()
             render()
             return
         }
 
         // Original lines stay on screen while the translation runs (~1-2 s);
-        // timestamps are preserved, only the text is swapped.
-        translator.translate(lines: lines.map(\.text)) { [weak self] translated in
+        // timestamps are preserved, only accepted texts are swapped.
+        translator.translate(lines: devanagariIndices.map { lines[$0].text }) { [weak self] translated in
             guard let self, gen == self.trackGen, let translated else { return }
-            let translatedLines = zip(lines, translated).map { LrcLine(ms: $0.ms, text: $1) }
-            self.engine.setLines(Self.markTranslated(translatedLines))
-            // Cache stays unmarked — the marker is display-only.
-            try? Data(LrcParser.serialize(translatedLines).utf8)
-                .write(to: cachePath, options: .atomic)
+            var display = lines
+            for (j, index) in devanagariIndices.enumerated() where j < translated.count {
+                // Accept only output that actually reads as English; the
+                // marked line tells the user it's our translation.
+                if ScriptDetector.isMostlyLatin(translated[j]) {
+                    display[index] = LrcLine(ms: lines[index].ms, text: "⇄ " + translated[j])
+                }
+            }
+            guard display != lines else { return }  // nothing accepted — keep originals
+            self.engine.setLines(display)
+            try? Data(LrcParser.serialize(display).utf8).write(to: cachePath, options: .atomic)
             self.updateTimers()
             self.render()
         }
-    }
-
-    /// Monochrome marker so the user can tell translated lines from lrclib
-    /// originals at a glance; interlude (empty) lines stay unmarked.
-    private static func markTranslated(_ lines: [LrcLine]) -> [LrcLine] {
-        lines.map { $0.text.isEmpty ? $0 : LrcLine(ms: $0.ms, text: "⇄ " + $0.text) }
     }
 
     // MARK: - Scheduling
