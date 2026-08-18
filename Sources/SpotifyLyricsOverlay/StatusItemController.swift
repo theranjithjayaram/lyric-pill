@@ -4,6 +4,7 @@ import AppKit
 final class StatusItemController: NSObject, NSMenuDelegate {
     var onModeChange: ((OverlayMode) -> Void)?
     var onMoveModeChange: ((Bool) -> Void)?
+    var onTranslateChange: ((Bool) -> Void)?
     /// Called each time the menu opens — keeps the status line current without
     /// any background refresh.
     var statusText: (() -> String)?
@@ -12,8 +13,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var modeItems: [NSMenuItem] = []
     private let infoItem = NSMenuItem()
     private let moveItem = NSMenuItem()
+    private let translateItem = NSMenuItem()
 
-    init(currentMode: OverlayMode) {
+    init(currentMode: OverlayMode, translateHindi: Bool) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -43,6 +45,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         moveItem.action = #selector(toggleMove(_:))
         moveItem.target = self
         menu.addItem(moveItem)
+
+        if #available(macOS 15.0, *) {
+            translateItem.title = "Translate Hindi → English"
+            translateItem.action = #selector(toggleTranslate(_:))
+            translateItem.target = self
+            translateItem.state = translateHindi ? .on : .off
+            menu.addItem(translateItem)
+        }
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
@@ -70,5 +80,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleMove(_ sender: NSMenuItem) {
         sender.state = sender.state == .on ? .off : .on
         onMoveModeChange?(sender.state == .on)
+    }
+
+    @objc private func toggleTranslate(_ sender: NSMenuItem) {
+        sender.state = sender.state == .on ? .off : .on
+        onTranslateChange?(sender.state == .on)
     }
 }

@@ -9,6 +9,15 @@ if let bundleId = Bundle.main.bundleIdentifier {
     }
 }
 
+if let flag = CommandLine.arguments.firstIndex(of: "--translate-check"),
+   flag + 1 < CommandLine.arguments.count {
+    if #available(macOS 15.0, *) {
+        TranslateCheck.run(lrcPath: CommandLine.arguments[flag + 1])
+    }
+    FileHandle.standardError.write(Data("--translate-check requires macOS 15+\n".utf8))
+    exit(1)
+}
+
 var simulatePath: String?
 if let flag = CommandLine.arguments.firstIndex(of: "--simulate"),
    flag + 1 < CommandLine.arguments.count {

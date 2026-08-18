@@ -103,10 +103,15 @@ public final class LrclibClient {
         return result.isEmpty ? title : result
     }
 
-    private func cachePath(for key: String) -> URL {
-        let hex = Insecure.SHA1.hash(data: Data(key.utf8))
+    /// Stable digest for cache filenames; public so other lyric-derived caches
+    /// (e.g. translations) key the same way.
+    public static func cacheDigest(_ key: String) -> String {
+        Insecure.SHA1.hash(data: Data(key.utf8))
             .map { String(format: "%02x", $0) }.joined()
-        return cacheDir.appendingPathComponent(hex + ".lrc")
+    }
+
+    private func cachePath(for key: String) -> URL {
+        cacheDir.appendingPathComponent(Self.cacheDigest(key) + ".lrc")
     }
 
     private func fetch(artist: String, title: String, album: String, durationS: Int) -> FetchResult {

@@ -46,6 +46,12 @@ Result: the two-process daemon + extension design collapses into **one small App
 - **Cached misses expire after 24 h** so fresh releases get re-checked once lrclib catches up.
 - **Cleaned-title last-resort search**: annotation suffixes (`(From "Movie")`, `(feat. X)`,
   remaster tags) are stripped and the artist filter dropped, gated to ±10 s duration.
+- **On-device Hindi translation** (macOS 15+, toggleable): Devanagari-script lyrics are batch
+  translated to English via Apple's Translation framework once per song and cached. The
+  framework only exposes sessions through SwiftUI's `.translationTask`, so a tiny invisible
+  host window carries one; it becomes visible only for the one-time model-download consent.
+  Gotchas: `session.prepareTranslation()` must be called before `translations(from:)`, and the
+  translator must not be `@MainActor` (nonisolated callers hard-error even in Swift 5 mode).
 - **`nextBoundaryMs()`** added to the timing engine so the app can sleep until exactly the
   next line change instead of ticking at 150 ms.
 - **Overlay anchoring**: persisted point is the pill's *center*, so lines of different width

@@ -34,6 +34,10 @@ Spotify ──"PlaybackStateChanged" distributed notification──► menu-bar 
   lyrics — the menu status says so; the next track (or a replay) fetches fresh.
 - **Timing** — playback position is interpolated with a monotonic clock between samples and
   re-synced every 10 s while playing.
+- **Hindi translation (optional, macOS 15+)** — when fetched lyrics are written in Devanagari
+  script, they're translated to English **on-device** via Apple's Translation framework (one-time
+  system language-pack download; zero network per song, result cached to disk). Romanized Hindi,
+  English uploads, and other languages are shown as-is. Toggle: menu → "Translate Hindi → English".
 
 ### Designed to be weightless
 
@@ -70,6 +74,7 @@ Click the **♫ icon** in the menu bar:
 - **Mode: Off / On / Auto** — `Auto` shows the overlay only while a synced line is playing;
   `Off` hides it; `On` shows whenever a line is available (frozen while paused).
 - **Move Mode** — toggle on, drag the pill anywhere, toggle off. The position is remembered.
+- **Translate Hindi → English** — on-device translation of Devanagari-script lyrics (see above).
 - The first menu row shows live status (playing / no synced lyrics / permission problems).
 
 ## Troubleshooting

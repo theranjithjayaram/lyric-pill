@@ -48,4 +48,13 @@ public enum LrcParser {
             .sorted { ($0.element.ms, $0.offset) < ($1.element.ms, $1.offset) }
             .map(\.element)
     }
+
+    /// Inverse of parse — used to persist derived lyrics (e.g. translations)
+    /// in the same cache format the app already reads.
+    public static func serialize(_ lines: [LrcLine]) -> String {
+        lines.map { line in
+            String(format: "[%02d:%02d.%03d] %@",
+                   line.ms / 60_000, (line.ms % 60_000) / 1000, line.ms % 1000, line.text)
+        }.joined(separator: "\n")
+    }
 }

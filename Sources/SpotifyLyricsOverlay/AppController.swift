@@ -34,12 +34,28 @@ final class AppController {
 
     private static let resyncInterval: TimeInterval = 10
 
+    private let cacheDir: URL
+    // Type-erased because LyricsTranslator is macOS 15+ while the app targets 13.
+    private var translatorStorage: Any?
+    private var currentFetchKey = ""
+
     init(simulateLrcPath: String?) {
         self.simulateLrcPath = simulateLrcPath
         overlay = OverlayWindow(savedCenter: Settings.savedCenter)
-        statusBar = StatusItemController(currentMode: mode)
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        lrclib = LrclibClient(cacheDir: caches.appendingPathComponent("spotify-lyrics-overlay"))
+        statusBar = StatusItemController(currentMode: mode, translateHindi: Settings.translateHindi)
+        cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("spotify-lyrics-overlay")
+        lrclib = LrclibClient(cacheDir: cacheDir)
+    }
+
+    @available(macOS 15.0, *)
+    private var translator: LyricsTranslator {
+        if let existing = translatorStorage as? LyricsTranslator {
+            return existing
+        }
+        let created = LyricsTranslator()
+        translatorStorage = created
+        return created
     }
 
     func start() {
@@ -51,6 +67,14 @@ final class AppController {
             Settings.mode = newMode
             self.updateTimers()
             self.render()
+        }
+        statusBar.onTranslateChange = { [weak self] enabled in
+            guard let self else { return }
+            Settings.translateHindi = enabled
+            // Re-run the current track through the (cached) fetch so the
+            // toggle takes effect immediately, not at the next song.
+            self.currentTrackId = ""
+            self.watcher.refresh()
         }
         statusBar.onMoveModeChange = { [weak self] enabled in
             guard let self else { return }
@@ -106,6 +130,8 @@ final class AppController {
         hasLyrics = false
         serviceUnreachable = false
         engine.setLines([])
+        currentFetchKey = [snapshot.artist, snapshot.title, snapshot.album,
+                           String(snapshot.durationMs / 1000)].joined(separator: "|")
         guard !snapshot.trackId.isEmpty, !snapshot.title.isEmpty else {
             fetching = false
             return
@@ -128,9 +154,11 @@ final class AppController {
         fetching = false
         switch outcome {
         case .found(let lrc):
-            engine.setLines(LrcParser.parse(lrc))
+            let lines = LrcParser.parse(lrc)
+            engine.setLines(lines)
             hasLyrics = true
             serviceUnreachable = false
+            translateIfNeeded(gen: gen, lines: lines)
         case .none:
             engine.setLines([])
             hasLyrics = false
@@ -147,6 +175,35 @@ final class AppController {
         watcher.refresh()
         updateTimers()
         render()
+    }
+
+    // MARK: - Translation (Devanagari-script lyrics → English, on-device)
+
+    private func translateIfNeeded(gen: Int, lines: [LrcLine]) {
+        guard Settings.translateHindi, #available(macOS 15.0, *) else { return }
+        guard ScriptDetector.isMostlyDevanagari(lines.map(\.text).joined(separator: " "))
+        else { return }
+
+        let cachePath = cacheDir.appendingPathComponent(
+            LrclibClient.cacheDigest(currentFetchKey + "|hi-en") + ".lrc")
+        if let cached = try? String(contentsOf: cachePath, encoding: .utf8), !cached.isEmpty {
+            engine.setLines(LrcParser.parse(cached))
+            updateTimers()
+            render()
+            return
+        }
+
+        // Original lines stay on screen while the translation runs (~1-2 s);
+        // timestamps are preserved, only the text is swapped.
+        translator.translate(lines: lines.map(\.text)) { [weak self] translated in
+            guard let self, gen == self.trackGen, let translated else { return }
+            let translatedLines = zip(lines, translated).map { LrcLine(ms: $0.ms, text: $1) }
+            self.engine.setLines(translatedLines)
+            try? Data(LrcParser.serialize(translatedLines).utf8)
+                .write(to: cachePath, options: .atomic)
+            self.updateTimers()
+            self.render()
+        }
     }
 
     // MARK: - Scheduling

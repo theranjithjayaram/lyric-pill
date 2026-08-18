@@ -27,6 +27,16 @@ enum Settings {
         }
     }
 
+    /// Translate Devanagari-script lyrics to English on-device (macOS 15+).
+    static var translateHindi: Bool {
+        get {
+            UserDefaults.standard.object(forKey: "translate-hindi") as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "translate-hindi")
+        }
+    }
+
     /// Center of the overlay pill in screen coordinates; nil until first dragged.
     static var savedCenter: CGPoint? {
         get {
