@@ -54,6 +54,20 @@ final class SpotifyWatcher {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appTerminated(_:)),
             name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(appLaunched(_:)),
+            name: NSWorkspace.didLaunchApplicationNotification, object: nil)
+    }
+
+    @objc private func appLaunched(_ note: Notification) {
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        guard app?.bundleIdentifier == Self.spotifyBundleId else { return }
+        // A restarted Spotify that auto-resumes playback may never post
+        // PlaybackStateChanged, which would strand us idle. Read its state
+        // directly once it has had a moment to boot its scripting interface
+        // (second read covers a slow launch); both are one-shot, no polling.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.refresh() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in self?.refresh() }
     }
 
     @objc private func playbackChanged(_ note: Notification) {
