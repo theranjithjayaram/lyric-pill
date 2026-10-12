@@ -44,7 +44,7 @@ final class AppController {
         overlay = OverlayWindow(savedCenter: Settings.savedCenter)
         statusBar = StatusItemController(currentMode: mode, translateHindi: Settings.translateHindi)
         cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("spotify-lyrics-overlay")
+            .appendingPathComponent("lyric-pill")
         lrclib = LrclibClient(cacheDir: cacheDir)
     }
 

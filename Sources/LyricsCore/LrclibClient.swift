@@ -18,7 +18,7 @@ public final class LrclibClient {
     public typealias HttpGet = (URL) throws -> (status: Int, body: String)
 
     private static let base = "https://lrclib.net"
-    private static let userAgent = "spotify-lyrics-overlay-mac/0.1 (https://lrclib.net)"
+    private static let userAgent = "lyric-pill/1.0 (https://github.com/theranjithjayaram/lyric-pill)"
     private static let missTTL: TimeInterval = 24 * 3600
     /// lrclib under load can take several seconds just to accept a connection.
     private static let requestTimeout: TimeInterval = 15

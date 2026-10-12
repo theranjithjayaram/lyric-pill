@@ -1,8 +1,8 @@
-# Spotify Lyrics Overlay (macOS) — Design
+# LyricPill — Design
 
 **Status:** Working
-**Reference:** `spotify-lyrics-overlay` (GNOME 42/Wayland original at
-`~/Documents/groups-mac-data/projects/spotify-lyrics-overlay`)
+**Reference:** ported from the author's `spotify-lyrics-overlay` (a GNOME 42/Wayland
+daemon + shell-extension pair, MIT)
 
 ## Goal
 
@@ -34,7 +34,7 @@ Result: the two-process daemon + extension design collapses into **one small App
 | Position persistence | `UserDefaults` (center point of the pill) |
 | Modes | Off / On / Auto + Move Mode, same semantics as the original |
 | Tests | Pure-logic units (parser, engine, client) via a self-contained runner (`swift run lyrics-tests`) — CLT ships no XCTest/Swift Testing |
-| Packaging | `install.sh` → ad-hoc-signed `~/Applications/SpotifyLyricsOverlay.app` + LaunchAgent (RunAtLoad) |
+| Packaging | `install.sh` → ad-hoc-signed `~/Applications/LyricPill.app` + LaunchAgent (RunAtLoad) |
 
 ## Deviations from the reference implementation
 

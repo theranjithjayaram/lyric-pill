@@ -56,9 +56,9 @@ func lrcParserTests(_ t: TestReporter) {
     // Bilingual uploads: same timestamp twice (original + translation). File
     // order must be preserved so the engine lands on the second (translated) line.
     t.expect(
-        LrcParser.parse("[00:09.05] tujh bin suraj\r\n[00:09.05] Without you, no sun\r\n") == [
-            LrcLine(ms: 9050, text: "tujh bin suraj"),
-            LrcLine(ms: 9050, text: "Without you, no sun"),
+        LrcParser.parse("[00:09.05] aasmaan saaf hai\r\n[00:09.05] The sky is clear\r\n") == [
+            LrcLine(ms: 9050, text: "aasmaan saaf hai"),
+            LrcLine(ms: 9050, text: "The sky is clear"),
         ],
         "parser: duplicate-timestamp bilingual pairs keep order")
 }

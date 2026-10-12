@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SpotifyLyricsOverlay",
+    name: "LyricPill",
     platforms: [.macOS(.v13)],
     targets: [
         // Pure logic (LRC parsing, timing, lrclib fetch) — unit-tested, no AppKit.
@@ -11,7 +11,7 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]),
         // The menu-bar app: Spotify watcher, overlay panel, status item.
         .executableTarget(
-            name: "SpotifyLyricsOverlay",
+            name: "LyricPill",
             dependencies: ["LyricsCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         // Plain executable test runner (`swift run lyrics-tests`): Command Line

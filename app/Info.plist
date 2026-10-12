@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>SpotifyLyricsOverlay</string>
+	<string>LyricPill</string>
 	<key>CFBundleIdentifier</key>
-	<string>local.spotify-lyrics-overlay</string>
+	<string>io.github.theranjithjayaram.lyric-pill</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Spotify Lyrics Overlay</string>
+	<string>LyricPill</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>

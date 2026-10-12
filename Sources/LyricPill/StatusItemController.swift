@@ -20,7 +20,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         super.init()
 
         statusItem.button?.image = NSImage(
-            systemSymbolName: "music.note.list", accessibilityDescription: "Lyrics Overlay")
+            systemSymbolName: "music.note.list", accessibilityDescription: "LyricPill")
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -56,7 +56,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
-            title: "Quit Lyrics Overlay", action: #selector(NSApplication.terminate(_:)),
+            title: "Quit LyricPill", action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)

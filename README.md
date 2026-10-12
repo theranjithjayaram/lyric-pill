@@ -1,130 +1,114 @@
-# Spotify Lyrics Overlay (macOS)
+# LyricPill
 
-Show the current **time-synced lyric line** as a draggable, click-through overlay on your screen
-while Spotify plays — for any track that has synced lyrics.
+Show the current **time-synced lyric line** as a draggable, click-through pill on your screen
+while Spotify plays — for any track that has synced lyrics on [lrclib.net](https://lrclib.net).
 
-macOS port of `spotify-lyrics-overlay` (GNOME 42/Wayland). The Ubuntu
-version needed a Python daemon + shell extension split because GNOME/Wayland can't draw arbitrary
-always-on-top overlays; macOS can, so this is **one small native app** — Swift + AppKit, zero
-third-party dependencies.
+One small native macOS menu-bar app: Swift + AppKit, **zero third-party dependencies**, built with
+the standard toolchain (`swift build`). No Electron, no interpreter, no accounts, no API keys.
+
+## Features
+
+- Always-on-top, click-through lyric pill; drag it anywhere (Move Mode), position remembered.
+- Menu-bar modes: **Auto** (show only while a synced line is playing), **On**, **Off**.
+- **Optional Hindi → English translation** (macOS 15+): lyrics written in Devanagari script are
+  translated **on-device** with Apple's Translation framework and prefixed with a monochrome `⇄`
+  marker. Per line — mixed-script uploads keep non-Hindi lines as-is. Everything stays local.
+- Honest status row in the menu: playing / no synced lyrics / lyrics server unreachable.
 
 ## How it works
 
 ```
-Spotify ──"PlaybackStateChanged" distributed notification──► menu-bar app
-   ▲                                                             │
-   └────── Apple events (track, position, play state) ◄──────────┤
-                                                                 │
-                    lrclib.net ──HTTPS──► synced LRC (disk-cached)
-                                                                 │
-                     timing engine picks the active line         │
-                                                                 ▼
-                        borderless click-through NSPanel (the pill)
+Spotify ──"PlaybackStateChanged" notification──► LyricPill (menu-bar app)
+   ▲                                                  │
+   └── Apple events (track, position, play state) ◄───┤
+                                                      │
+                lrclib.net ──HTTPS──► synced LRC (disk-cached per song)
+                                                      │
+                 timing engine picks the active line  │
+                                                      ▼
+                    borderless click-through NSPanel (the pill)
 ```
 
-- **Track watching** — Spotify broadcasts a notification on every play/pause/track-change/seek;
-  the app then reads the authoritative position over Apple events (the standard Spotify
-  AppleScript interface).
-- **Lyrics** — fetched from [lrclib.net](https://lrclib.net) (artist + title + album + duration),
-  parsed from LRC, cached on disk under `~/Library/Caches/spotify-lyrics-overlay/`.
-  Exact lookup, then a search fallback, then a last-resort search with annotation suffixes
-  (`(From "Movie")`, `(feat. X)`, …) stripped — duration-gated so the wrong song can't match.
-  Misses are cached for 24 h (new releases gain lyrics on lrclib over time). If lrclib is
-  unreachable (network error or 5xx), nothing is cached and that song simply goes without
-  lyrics — the menu status says so; the next track (or a replay) fetches fresh.
-- **Timing** — playback position is interpolated with a monotonic clock between samples and
-  re-synced every 10 s while playing.
-- **Hindi translation (optional, macOS 15+)** — when fetched lyrics are written in Devanagari
-  script, they're translated to English **on-device** via Apple's Translation framework (one-time
-  system language-pack download; zero network per song, result cached to disk). Romanized Hindi,
-  English uploads, and other languages are shown as-is. Translated lines are prefixed with a
-  monochrome "⇄" marker. Toggle: menu → "Translate Hindi → English".
+- **Lyrics** come from lrclib.net (artist + title + album + duration): exact lookup, then a search
+  fallback, then a last-resort search with annotation suffixes (`(From "Movie")`, `(feat. X)`)
+  stripped — duration-gated so the wrong song can't match. Results (including misses) are cached
+  under `~/Library/Caches/lyric-pill/`; misses expire after 24 h so new releases get re-checked;
+  server outages are never cached and surface as "Lyrics server unreachable".
+- **Timing**: playback position is interpolated with a monotonic clock and re-synced every 10 s
+  while playing.
 
 ### Designed to be weightless
 
-- Single native process, ~15 MB RAM, no Electron / web view / interpreter.
-- **No periodic tick.** One timer is armed for exactly the next lyric-line boundary
-  (the Ubuntu version woke 7×/sec; this wakes once per lyric line).
-- **Fully idle when silent.** Paused, Spotify closed, or mode Off ⇒ zero timers, zero polling —
+- **No periodic tick** — one timer is armed for exactly the next lyric-line boundary.
+- **Fully idle when silent** — paused, Spotify closed, or mode Off ⇒ zero timers, zero polling;
   the process sleeps until Spotify's notification wakes it.
-- Timer tolerances let the kernel coalesce wakeups for battery.
+- Network only when a *new* song starts (cached forever after); translation is on-device.
+- Measured: ~55 MB RAM, ~0.3 % CPU while playing, ~350 KB binary, a few KB of cache per song.
 
 ## Requirements
 
-- macOS 13+ (built and tested on macOS 26).
+- macOS 13+ (translation feature needs macOS 15+).
 - Xcode Command Line Tools with Swift 6+ (`xcode-select --install`).
 - Spotify desktop client.
 
 ## Install
 
 ```bash
-cd ~/projects/spotify-lyrics-overlay-mac
+git clone https://github.com/theranjithjayaram/lyric-pill.git
+cd lyric-pill
 ./install.sh
 ```
 
-`install.sh` builds a release binary, assembles `~/Applications/SpotifyLyricsOverlay.app`
-(ad-hoc signed), installs a LaunchAgent so it starts at login, and launches it now.
+`install.sh` builds a release binary, assembles `~/Applications/LyricPill.app` (ad-hoc signed),
+installs a LaunchAgent so it starts at login, and launches it now.
 
-Play a song. The **first time**, macOS asks *"Spotify Lyrics Overlay would like to control
-Spotify"* — click **Allow**. The line appears bottom-center.
+Play a song. The **first time**, macOS asks *"LyricPill would like to control Spotify"* —
+click **Allow**. The first Hindi-script song asks once to download Apple's Hindi↔English language
+pack (optional; Cancel just skips translation).
+
+## Uninstall
+
+```bash
+./uninstall.sh
+```
 
 ## Usage
 
-Click the **♫ icon** in the menu bar:
-
-- **Mode: Off / On / Auto** — `Auto` shows the overlay only while a synced line is playing;
-  `Off` hides it; `On` shows whenever a line is available (frozen while paused).
-- **Move Mode** — toggle on, drag the pill anywhere, toggle off. The position is remembered.
-- **Translate Hindi → English** — on-device translation of Devanagari-script lyrics (see above).
-- The first menu row shows live status (playing / no synced lyrics / permission problems).
+Click the **♫ icon** in the menu bar: mode selection, Move Mode (drag the pill, toggle off to
+save), the Hindi→English toggle, and a live status row.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| Overlay never appears | Menu-bar ♫ → status row. `Auto` mode + track without synced lyrics = hidden (expected). |
-| Status says Apple events failed | System Settings → Privacy & Security → **Automation** → Spotify Lyrics Overlay → allow Spotify. |
-| No menu-bar icon | `launchctl list \| grep spotify-lyrics` — rerun `./install.sh`. |
-| One song shows nothing | That track has no synced lyrics on lrclib (cached for 24 h; overlay stays hidden). |
-| Every song shows nothing | Menu status row says "Lyrics server unreachable"? lrclib.net is down — new tracks fetch fresh once it recovers. |
-| Stale lyrics suspected | `rm -rf ~/Library/Caches/spotify-lyrics-overlay/` |
-
-## Uninstall
-
-```bash
-launchctl unload ~/Library/LaunchAgents/local.spotify-lyrics-overlay.plist
-rm ~/Library/LaunchAgents/local.spotify-lyrics-overlay.plist
-rm -rf ~/Applications/SpotifyLyricsOverlay.app ~/Library/Caches/spotify-lyrics-overlay
-```
+| Overlay never appears | Menu ♫ → status row. Auto mode + track without synced lyrics = hidden (expected). |
+| Status mentions Apple events | System Settings → Privacy & Security → Automation → LyricPill → allow Spotify. |
+| Every song shows nothing | Status says "Lyrics server unreachable"? lrclib.net is down — new tracks fetch fresh once it recovers. |
+| Stale lyrics suspected | `rm -rf ~/Library/Caches/lyric-pill/` |
 
 ## Development
 
 ```bash
-swift run lyrics-tests   # unit tests: LRC parser, timing engine, lrclib client
-swift build              # debug build
-
-# Drive the overlay from a local .lrc file with no Spotify (debug):
-swift run SpotifyLyricsOverlay --simulate examples/sample.lrc
+swift run lyrics-tests                        # unit tests (parser, timing, lrclib client)
+swift run LyricPill --simulate examples/sample.lrc      # drive the overlay with no Spotify
+swift run LyricPill --translate-check examples/hindi-sample.lrc
+swift run LyricPill --engine-check examples/sample.lrc
 ```
 
-The tests are a plain executable rather than `swift test` because the Xcode Command Line Tools
-ship neither XCTest nor Swift Testing (both require a full Xcode install).
-
-The Spotify watcher, overlay panel, and menu bar are integration code, verified live rather than
-unit-tested (same philosophy as the Ubuntu original).
+Tests are a plain executable because Command Line Tools ship neither XCTest nor Swift Testing.
+Architecture notes and the full decision log: [docs/design.md](docs/design.md).
 
 ## Privacy
 
 To find lyrics, the app sends the playing track's **artist, title, album, and duration** to
-lrclib.net over HTTPS. No account, credentials, or other data are sent. Results (including
-misses) are cached under `~/Library/Caches/spotify-lyrics-overlay/`.
+lrclib.net over HTTPS — nothing else, ever. Translation runs entirely on-device. No analytics,
+no accounts, no telemetry.
 
-## Limitations
+## Legal
 
-- Spotify desktop only (bundle id `com.spotify.client`).
-- Line-level sync only (lrclib timing is per-line, so no per-word karaoke).
-- Local files in Spotify work; podcasts/ads simply show nothing.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+- Not affiliated with, endorsed by, or sponsored by Spotify. It talks to the Spotify desktop
+  client through Spotify's own public AppleScript interface.
+- Lyrics are fetched at runtime from [lrclib.net](https://lrclib.net), a community lyrics service;
+  no lyrics are bundled or redistributed by this project. Lyrics remain the property of their
+  rights holders.
+- Code: MIT — see [LICENSE](LICENSE).

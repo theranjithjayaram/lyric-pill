@@ -1,27 +1,28 @@
 import LyricsCore
 
+// All fixture text is invented plain language — no real song lyrics.
 func scriptDetectorTests(_ t: TestReporter) {
-    t.expect(ScriptDetector.isMostlyDevanagari("तू जो रूठा तो कौन हँसेगा"),
+    t.expect(ScriptDetector.isMostlyDevanagari("आज आसमान बिल्कुल साफ है"),
              "script: devanagari detected")
-    t.expect(!ScriptDetector.isMostlyDevanagari("Tu jo rootha toh kaun hasega"),
+    t.expect(!ScriptDetector.isMostlyDevanagari("aaj aasmaan bilkul saaf hai"),
              "script: romanized hindi is not devanagari")
-    t.expect(!ScriptDetector.isMostlyDevanagari("If you are silent, who will laugh?"),
+    t.expect(!ScriptDetector.isMostlyDevanagari("The sky is perfectly clear today"),
              "script: english is not devanagari")
-    t.expect(ScriptDetector.isMostlyDevanagari("तेरा yaar हूँ main"),
+    t.expect(ScriptDetector.isMostlyDevanagari("मेरा best दोस्त है"),
              "script: mixed line above threshold detected")
     t.expect(!ScriptDetector.isMostlyDevanagari(""),
              "script: empty text is not devanagari")
     t.expect(!ScriptDetector.isMostlyDevanagari("... 123 !!!"),
              "script: no letters is not devanagari")
 
-    t.expect(!ScriptDetector.isMostlyDevanagari("ਮੈਨੂੰ ਚੜ੍ਹਿਆ ਇਸ਼ਕ ਮੇਂ ਰੰਗ ਤੇਰਾ"),
+    t.expect(!ScriptDetector.isMostlyDevanagari("ਅੱਜ ਮੌਸਮ ਬਹੁਤ ਵਧੀਆ ਹੈ"),
              "script: gurmukhi line is not devanagari")
 
-    t.expect(ScriptDetector.isMostlyLatin("Even if you are not close, you were always near"),
+    t.expect(ScriptDetector.isMostlyLatin("The day is bright and the night is calm"),
              "script: english output is latin")
-    t.expect(!ScriptDetector.isMostlyLatin("ਇੱਕ ਹੋਿਗਾ ਅੰਗ ਮੇਰਾ, ਅੰਗ"),
-             "script: mangled gurmukhi output is not latin")
-    t.expect(!ScriptDetector.isMostlyLatin("तेरा यार हूँ मैं"),
+    t.expect(!ScriptDetector.isMostlyLatin("ਅੱਜ ਮੌਸਮ ਵਧੀਆ ਹੈ"),
+             "script: gurmukhi output is not latin")
+    t.expect(!ScriptDetector.isMostlyLatin("मैं तुम्हारा दोस्त हूँ"),
              "script: devanagari passthrough is not latin")
     t.expect(!ScriptDetector.isMostlyLatin("…"), "script: no letters is not latin")
 
