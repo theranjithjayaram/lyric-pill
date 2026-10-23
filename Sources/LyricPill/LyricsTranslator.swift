@@ -78,6 +78,14 @@ final class LyricsTranslator {
     // request would silently skip that song.
     private var queue: [Job] = []
     private var busy = false
+    // Identifies the in-flight job, so a late or duplicate answer (a task
+    // SwiftUI cancelled, or one that fires after the deadline) is ignored.
+    private var jobGen = 0
+    // A translate job that never answers (translationd wedged) would block
+    // every later translation and pack download for the process lifetime, so
+    // each one gets a single one-shot deadline — no repeating machinery.
+    // Downloads wait on the user's consent sheet and have none.
+    private static let translateTimeout: TimeInterval = 60
 
     init() {
         let hosting = NSHostingView(rootView: HostView(model: model))
@@ -127,38 +135,58 @@ final class LyricsTranslator {
     private func startNextIfIdle() {
         guard !busy, let job = queue.first else { return }
         busy = true
+        jobGen += 1
+        let gen = jobGen
         Task { @MainActor in
             let status = await self.availability(from: job.source, to: job.target)
             switch job.work {
-            case .translate(let lines, let completion):
+            case .translate(let lines, _):
                 // .supported = pack not downloaded. A song change must never
                 // pop the consent sheet — downloads are started from Settings.
                 guard status == .installed else {
-                    self.finish()
-                    completion(nil)
+                    self.complete(gen, lines: nil)
                     return
                 }
                 self.show(interactive: false)
                 self.run(job, lines: lines) { [weak self] result in
-                    self?.finish()
-                    completion(result)
+                    self?.complete(gen, lines: result)
                 }
-            case .download(let completion):
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.translateTimeout) { [weak self] in
+                    guard let self, self.busy, gen == self.jobGen else { return }
+                    FileHandle.standardError.write(
+                        Data("translation timed out: \(job.source) → \(job.target)\n".utf8))
+                    self.complete(gen, lines: nil)
+                }
+            case .download:
                 guard status == .supported else {  // already installed, or unsupported
-                    self.finish()
-                    completion(status == .installed)
+                    self.complete(gen, installed: status == .installed)
                     return
                 }
                 self.show(interactive: true)
                 self.run(job, lines: []) { [weak self] _ in
                     Task { @MainActor in
-                        let now = await self?.availability(from: job.source, to: job.target)
-                        self?.finish()
-                        completion(now == .installed)
+                        guard let self else { return }
+                        let now = await self.availability(from: job.source, to: job.target)
+                        self.complete(gen, installed: now == .installed)
                     }
                 }
             }
         }
+    }
+
+    /// Ends the in-flight job exactly once (a stale gen is a late or duplicate
+    /// answer), hands its result to the caller, and starts the next.
+    private func complete(_ gen: Int, lines: [String]? = nil, installed: Bool = false) {
+        guard busy, gen == jobGen, let job = queue.first else { return }
+        window.orderOut(nil)
+        model.job = nil  // a task that hasn't picked this job up yet finds nothing
+        queue.removeFirst()
+        busy = false
+        switch job.work {
+        case .translate(_, let completion): completion(lines)
+        case .download(let completion): completion(installed)
+        }
+        startNextIfIdle()
     }
 
     /// Hands the job to the host view's task: a new configuration fires it,
@@ -173,13 +201,6 @@ final class LyricsTranslator {
         } else {
             model.configuration = TranslationSession.Configuration(source: source, target: target)
         }
-    }
-
-    private func finish() {
-        window.orderOut(nil)
-        queue.removeFirst()
-        busy = false
-        startNextIfIdle()
     }
 
     private static func name(_ id: String) -> String {

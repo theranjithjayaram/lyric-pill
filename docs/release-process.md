@@ -60,8 +60,9 @@ open build/LyricPill-dev.dmg
 ## 5. First-time repository setup checklist
 
 - [ ] Repository visibility: public (`gh repo edit --visibility public --accept-visibility-change-consequences`).
-- [ ] Settings → Actions → General → Workflow permissions: *Read and write* (the release job
-      creates the GitHub Release with the built-in `GITHUB_TOKEN`).
+- [ ] Settings → Actions → General: Actions allowed to run. The release job requests
+      `contents: write` itself, so the default *Read repository contents* token permission is
+      fine unless an organisation policy forbids workflows from elevating.
 - [ ] Settings → Code security → *Private vulnerability reporting*: enabled (SECURITY.md links to it).
 - [ ] Optional: the five signing secrets above.
 - [ ] Optional: a Homebrew cask (`brew install --cask`) can be added once releases are notarized —

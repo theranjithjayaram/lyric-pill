@@ -10,9 +10,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 First public release.
 
 ### Added
-- Downloadable `.dmg` built by GitHub Actions on every `v*` tag, with SHA-256 checksum. Signed and
-  notarized when the maintainer's Developer ID secrets are configured; otherwise ad-hoc signed with
-  documented *Open Anyway* instructions.
+- Downloadable `.dmg` built by GitHub Actions on every `v*` tag, with SHA-256 checksum. Universal
+  binary (Apple silicon + Intel). Signed and notarized when the maintainer's Developer ID secrets
+  are configured; otherwise ad-hoc signed with documented *Open Anyway* instructions.
 - **Settings window** (menu ♫ → Settings…, ⌘,): overlay mode, launch at login, Spotify automation
   status, pill font size and opacity, reset position.
 - **Translation settings**: choose the target language and any number of source languages among

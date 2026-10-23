@@ -48,7 +48,7 @@ macOS shows *"Apple could not verify LyricPill is free of malware"* on first ope
 
 - click **Done**, then System Settings → **Privacy & Security** → scroll to *Security* →
   **Open Anyway** (once); or
-- in Terminal: `xattr -d com.apple.quarantine /Applications/LyricPill.app`; or
+- in Terminal: `xattr -dr com.apple.quarantine /Applications/LyricPill.app`; or
 - verify the checksum and build it yourself (below).
 
 Every release ships a `.sha256` file:

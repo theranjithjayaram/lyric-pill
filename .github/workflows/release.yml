@@ -87,6 +87,17 @@ jobs:
       - name: Build app
         run: scripts/build-app.sh --version "$VERSION" --sign "${IDENTITY:--}" --out build
 
+      # The app is notarized and stapled before packing so the copy users drag
+      # out of the DMG carries its own ticket (opens offline); the DMG gets its
+      # own ticket after.
+      - name: Notarize app
+        if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: scripts/notarize.sh build/LyricPill.app
+
       - name: Make DMG
         run: |
           if [ -n "${IDENTITY:-}" ]; then
@@ -95,13 +106,21 @@ jobs:
             scripts/make-dmg.sh build/LyricPill.app "build/LyricPill-$VERSION.dmg"
           fi
 
-      - name: Notarize
+      - name: Notarize DMG
         if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: scripts/notarize.sh "build/LyricPill-$VERSION.dmg"
+
+      # Last word on the checksum: stapling rewrites the DMG, so it is computed
+      # here, after every step that can touch the file.
+      - name: Checksum
+        run: |
+          cd build
+          shasum -a 256 "LyricPill-$VERSION.dmg" > "LyricPill-$VERSION.dmg.sha256"
+          cat "LyricPill-$VERSION.dmg.sha256"
 
       - name: Release notes
         run: |

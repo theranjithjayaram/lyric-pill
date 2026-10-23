@@ -7,7 +7,8 @@ State as of 2026-10-23.
 
 **LyricPill** — a native macOS menu-bar app that shows the current time-synced lyric line of the
 playing Spotify track as an always-on-top, click-through, draggable "pill" overlay. Optional
-on-device Hindi→English translation. Swift + AppKit, zero third-party dependencies.
+on-device translation (any pair Apple's Translation framework supports; Hindi→English by
+default). Swift + AppKit, zero third-party dependencies.
 
 - Repo: https://github.com/theranjithjayaram/lyric-pill (**private** until the owner flips it with
   `gh repo edit --visibility public --accept-visibility-change-consequences`). Owner account
@@ -64,7 +65,8 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
   - `LrclibClient.swift` — fetch chain + cache (see §4); `LyricsOutcome` enum
     `.found(String) / .none / .unavailable`; `cleanTitle()`; `cacheDigest()` (SHA-1 helper);
     ephemeral URLSession (no CFNetwork disk cache), 15 s timeout, UA
-    `lyric-pill/1.0 (https://github.com/theranjithjayaram/lyric-pill)`.
+    `lyric-pill/<CFBundleShortVersionString> (https://github.com/theranjithjayaram/lyric-pill)`
+    (`dev` when unbundled).
   - `ScriptDetector.swift` — `isMostlyDevanagari` (≥30% of alphabetic scalars in U+0900–097F),
     `isMostlyLatin` (≥70% Latin incl. U+1E00–1EFF for Vietnamese), and `dominantScript()` →
     `Script` enum (latin/greek/cyrillic/hebrew/arabic/devanagari/bengali/gurmukhi/tamil/thai/
@@ -98,8 +100,9 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     Move Mode, Translate Lyrics toggle, Settings… (⌘,), About, Quit. Mode/translate write the
     shared `SettingsStore`; checkmarks re-read on every open.
   - `LyricsTranslator.swift` — Apple Translation framework host (see §5): FIFO job queue (one in
-    flight), `translate(lines:from:to:)`, `downloadLanguagePack(from:to:)` (the only path that
-    shows the consent sheet), `availability`, `supportedLanguageIDs`; + `TranslateCheck` runner.
+    flight; 60 s one-shot deadline per translate job, none for downloads — bug #14),
+    `translate(lines:from:to:)`, `downloadLanguagePack(from:to:)` (the only path that shows the
+    consent sheet), `availability`, `supportedLanguageIDs`; + `TranslateCheck` runner.
   - `Settings.swift` — `SettingsStore: ObservableObject` (`.shared`), `@Published` + UserDefaults:
     `mode` (auto), `center-x/y`, `translate-enabled` (true; migrated once from `translate-hindi`),
     `translate-sources` (`["hi"]`), `translate-target` (`"en"`), `pill-font-size` (20, 14…36),
@@ -280,6 +283,20 @@ Known data realities (explained to owner, accepted):
 13. **`NSHostingController` sizing**: with default `sizingOptions` the Settings window was 0×0
     at `center()` time (landed with its left edge on mid-screen) and grew later. Fix:
     `sizingOptions = []` + explicit `setContentSize`.
+14. **Translator queue could wedge forever** (review finding, not observed): `busy` was cleared
+    only by the hosted task's completion, so a task that never fires/answers (cold
+    `translationd`, host window never "appears") would block every later translation *and*
+    Settings pack download for the process lifetime. Fix: per-job generation + one one-shot 60 s
+    deadline for translate jobs (`complete(gen)` runs once; late/duplicate answers are ignored).
+    Download jobs wait on the user's consent sheet and have no deadline.
+15. **Universal build needs the right flags**: `swift build --arch arm64 --arch x86_64` requires
+    xcbuild (full Xcode) and fails on Command Line Tools; one `swift build --triple
+    <arch>-apple-macosx` per arch + `lipo -create` works everywhere. Found by the review: the
+    first CI DMG would have been arm64-only while the README promised Intel.
+16. **Checksum before staple**: `stapler staple` rewrites the DMG, so a `.sha256` computed by
+    `make-dmg.sh` fails for notarized releases. The workflow computes it as its last file-touching
+    step; `notarize.sh` also rewrites one it finds. The app is notarized+stapled before packing
+    so the copy users drag out opens offline.
 
 ## 8. Publication / legal (advisor-reviewed 2026-10-12, verdict applied)
 
@@ -307,7 +324,8 @@ Known data realities (explained to owner, accepted):
 
 ## 9. Install / operate
 
-- `scripts/build-app.sh [--version --build --sign --out]`: `swift build -c release` → assemble
+- `scripts/build-app.sh [--version --build --sign --out --archs]`: `swift build -c release
+  --triple <arch>-apple-macosx` per arch + `lipo -create` (universal by default) → assemble
   `build/LyricPill.app` (Info.plist versions via `plutil`, `AppIcon.icns`, `PkgInfo`, `strip -x`)
   → codesign (**ad-hoc with `--identifier <bundle id>`** so the TCC Automation grant survives
   rebuilds, or Developer ID with hardened runtime + entitlements) → `codesign --verify --strict`.

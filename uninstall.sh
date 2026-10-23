@@ -25,5 +25,5 @@ defaults delete "$BUNDLE_ID" 2>/dev/null || true
 echo
 echo "Done."
 echo "  • If LyricPill still appears in System Settings → General → Login Items, remove it there."
-echo "  • The Hindi → English language pack, if downloaded, is managed by macOS:"
+echo "  • Downloaded language packs are managed by macOS:"
 echo "    System Settings → General → Language & Region → Translation Languages."

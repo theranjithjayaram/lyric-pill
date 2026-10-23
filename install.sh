@@ -54,4 +54,4 @@ open "$DEST_DIR/$APP_NAME"
 echo
 echo "Done. Look for the ♫ icon in the menu bar."
 echo "  • First playback asks for permission to control Spotify — click Allow."
-echo "  • Hindi → English translation (macOS 15+): Settings → Translation downloads the language pack."
+echo "  • Translation (macOS 15+): Settings → Translation downloads the language pack."
