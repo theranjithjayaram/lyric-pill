@@ -1,21 +1,24 @@
 import AppKit
 
-/// Menu-bar item: a status line, mode selection (off/on/auto), move mode, quit.
+/// Menu-bar item: a status line, mode selection (off/on/auto), move mode,
+/// translation toggle, Settings/About, quit. Mode and translation write the
+/// shared SettingsStore directly; their checkmarks are re-read each time the
+/// menu opens so changes made in the Settings window show up too.
 final class StatusItemController: NSObject, NSMenuDelegate {
-    var onModeChange: ((OverlayMode) -> Void)?
     var onMoveModeChange: ((Bool) -> Void)?
-    var onTranslateChange: ((Bool) -> Void)?
+    var onOpenSettings: ((SettingsTab) -> Void)?
     /// Called each time the menu opens — keeps the status line current without
     /// any background refresh.
     var statusText: (() -> String)?
 
+    private let store = SettingsStore.shared
     private let statusItem: NSStatusItem
     private var modeItems: [NSMenuItem] = []
     private let infoItem = NSMenuItem()
     private let moveItem = NSMenuItem()
     private let translateItem = NSMenuItem()
 
-    init(currentMode: OverlayMode, translateHindi: Bool) {
+    override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -35,7 +38,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 title: "Mode: \(mode.title)", action: #selector(selectMode(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = mode.rawValue
-            item.state = mode == currentMode ? .on : .off
             modeItems.append(item)
             menu.addItem(item)
         }
@@ -47,12 +49,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(moveItem)
 
         if #available(macOS 15.0, *) {
-            translateItem.title = "Translate Hindi → English"
+            translateItem.title = "Translate Lyrics"
             translateItem.action = #selector(toggleTranslate(_:))
             translateItem.target = self
-            translateItem.state = translateHindi ? .on : .off
             menu.addItem(translateItem)
         }
+        menu.addItem(.separator())
+
+        let settings = NSMenuItem(
+            title: "Settings…", action: #selector(openSettings(_:)), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+
+        let about = NSMenuItem(
+            title: "About LyricPill", action: #selector(openAbout(_:)), keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
@@ -62,19 +74,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
 
         statusItem.menu = menu
+        syncChecks()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
         infoItem.title = statusText?() ?? ""
+        syncChecks()
+    }
+
+    private func syncChecks() {
+        for item in modeItems {
+            item.state = item.representedObject as? String == store.mode.rawValue ? .on : .off
+        }
+        translateItem.state = store.translateEnabled ? .on : .off
     }
 
     @objc private func selectMode(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
               let mode = OverlayMode(rawValue: raw) else { return }
-        for item in modeItems {
-            item.state = item == sender ? .on : .off
-        }
-        onModeChange?(mode)
+        store.mode = mode
+        syncChecks()
     }
 
     @objc private func toggleMove(_ sender: NSMenuItem) {
@@ -83,7 +102,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleTranslate(_ sender: NSMenuItem) {
-        sender.state = sender.state == .on ? .off : .on
-        onTranslateChange?(sender.state == .on)
+        store.translateEnabled.toggle()
+        syncChecks()
+    }
+
+    @objc private func openSettings(_ sender: NSMenuItem) {
+        onOpenSettings?(.general)
+    }
+
+    @objc private func openAbout(_ sender: NSMenuItem) {
+        onOpenSettings?(.about)
     }
 }

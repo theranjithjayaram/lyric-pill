@@ -9,13 +9,18 @@ State as of 2026-10-23.
 playing Spotify track as an always-on-top, click-through, draggable "pill" overlay. Optional
 on-device Hindi→English translation. Swift + AppKit, zero third-party dependencies.
 
-- Repo: https://github.com/theranjithjayaram/lyric-pill (**private**; flip with
-  `gh repo edit --visibility public`). Owner account `theranjithjayaram` (personal).
-  The Mac's active `gh` account is the work one — run `gh auth switch -u theranjithjayaram`
-  before pushing, switch back after.
+- Repo: https://github.com/theranjithjayaram/lyric-pill (**private** until the owner flips it with
+  `gh repo edit --visibility public --accept-visibility-change-consequences`). Owner account
+  `theranjithjayaram` (personal). The Mac's active `gh` account is the work one — run
+  `gh auth switch -u theranjithjayaram` before pushing, switch back after.
 - Local checkout: `~/projects/lyric-pill` (default branch `main`).
-- Installed at `~/Applications/LyricPill.app`, started at login by LaunchAgent
-  `~/Library/LaunchAgents/io.github.theranjithjayaram.lyric-pill.plist`.
+- Distribution (since 1.0.0, see §12): DMG built by GitHub Actions on `v*` tags; `VERSION` file
+  is the single source of truth; `scripts/build-app.sh` + `scripts/make-dmg.sh` reproduce it
+  locally. Users install from the DMG or `./install.sh`.
+- Installed at `/Applications/LyricPill.app` (or `~/Applications` when `/Applications` isn't
+  writable); launch-at-login is the app's own `SMAppService` login item (Settings → General).
+  The pre-1.0 LaunchAgent plist `io.github.theranjithjayaram.lyric-pill` is removed by
+  `install.sh`.
 - History: ported from the author's own `spotify-lyrics-overlay` (GNOME 42/Wayland, Python daemon +
   shell extension, MIT) which lives at `~/Documents/groups-mac-data/projects/spotify-lyrics-overlay`.
   On macOS the two-process design collapsed into one app because macOS allows arbitrary
@@ -61,7 +66,21 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     ephemeral URLSession (no CFNetwork disk cache), 15 s timeout, UA
     `lyric-pill/1.0 (https://github.com/theranjithjayaram/lyric-pill)`.
   - `ScriptDetector.swift` — `isMostlyDevanagari` (≥30% of alphabetic scalars in U+0900–097F),
-    `isMostlyLatin` (≥70% < U+0250) — the translation gates.
+    `isMostlyLatin` (≥70% Latin incl. U+1E00–1EFF for Vietnamese), and `dominantScript()` →
+    `Script` enum (latin/greek/cyrillic/hebrew/arabic/devanagari/bengali/gurmukhi/tamil/thai/
+    hangul/kana/han/other) by block-range table; any kana letter ⇒ `.kana` (Japanese vs Chinese
+    decided by rule, not model).
+  - `TranslationCatalog.swift` — the 20 languages Apple's Translation framework offers (macOS 15)
+    with their script; `normalize()` maps Apple ids (`zh-Hans-CN`, `en_US`) to catalog ids.
+  - `LanguageGate.swift` — `plan(lines:enabledSources:target:recognizer:)` → `[TranslationBatch]`
+    (per-line, rule-based: script → unique enabled language ⇒ translate; shared script ⇒ ask the
+    recognizer, skip unless it names a candidate; same script as target ⇒ recognizer with the
+    target as sink); `isPlausibleOutput` (target script check); `cacheKeySuffix` (`tr-<target>-
+    <sorted effective sources>-v3`).
+  - `AppleLanguageRecognizer.swift` — `NLLanguageRecognizer` **unconstrained**, top hypothesis
+    accepted only if ≥0.5 *and* among the candidates (see bug #12).
+  - `SemanticVersion.swift` — `Comparable`, parses `v1.2.3`/`1.2`/`1.2.3-beta`; used by the
+    update check.
 - **LyricPill** (executable, AppKit, main-thread-by-convention — **no `@MainActor`**, see bug #7):
   - `main.swift` — single-instance guard (bundle id); flags `--simulate <lrc>`,
     `--translate-check <lrc>`, `--engine-check <lrc>`; `.accessory` activation.
@@ -76,11 +95,24 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     **`cell.cellSize(forBounds:)`** (see bug #4); anchored on persisted *center* point; Move Mode =
     `isMovableByWindowBackground` + didMove observer.
   - `StatusItemController.swift` — ♫ menu: status row (via `menuWillOpen`), Mode Off/On/Auto,
-    Move Mode, Translate Hindi→English toggle, Quit.
-  - `LyricsTranslator.swift` — Apple Translation framework host (see §5) + `TranslateCheck` debug
-    runner.
-  - `Settings.swift` — UserDefaults: `mode` (off/on/auto, default auto), `center-x/y`,
-    `translate-hindi` (default true).
+    Move Mode, Translate Lyrics toggle, Settings… (⌘,), About, Quit. Mode/translate write the
+    shared `SettingsStore`; checkmarks re-read on every open.
+  - `LyricsTranslator.swift` — Apple Translation framework host (see §5): FIFO job queue (one in
+    flight), `translate(lines:from:to:)`, `downloadLanguagePack(from:to:)` (the only path that
+    shows the consent sheet), `availability`, `supportedLanguageIDs`; + `TranslateCheck` runner.
+  - `Settings.swift` — `SettingsStore: ObservableObject` (`.shared`), `@Published` + UserDefaults:
+    `mode` (auto), `center-x/y`, `translate-enabled` (true; migrated once from `translate-hindi`),
+    `translate-sources` (`["hi"]`), `translate-target` (`"en"`), `pill-font-size` (20, 14…36),
+    `pill-opacity` (0.55, 0.2…1), `first-run-done`.
+  - `SettingsWindow.swift` — `SettingsWindowController` (one 520×460 non-resizable window, built
+    on first open, hidden on close) hosting SwiftUI `TabView`: General / Translation / About.
+    Services reach the view as a struct of closures so the translator stays type-erased on
+    macOS 13.
+  - `LoginItem.swift` — `SMAppService.mainApp` register/unregister/status.
+  - `SpotifyAutomation.swift` — TCC Automation status via `AEDeterminePermissionToAutomateTarget`
+    (**by PID, on a background queue** — bug #11), no prompt, never launches Spotify.
+  - `UpdateChecker.swift` — on-demand GET of the latest GitHub release + `AppInfo` (bundle
+    version strings). Never automatic.
 - **lyrics-tests** (executable at `Tests/LyricsCoreTests/`): hand-rolled runner
   (`swift run lyrics-tests`), **because Command Line Tools ship neither XCTest nor Swift Testing**
   (both need full Xcode; this Mac has CLT only). 72 tests, all passing. All fixture text is
@@ -134,25 +166,31 @@ Known data realities (explained to owner, accepted):
 
 ## 5. Translation (optional, macOS 15+, on-device)
 
-- Trigger: `Settings.translateHindi` on **and** a lyric line is individually
-  `isMostlyDevanagari` (**per-line gate** — mixed Hindi/Punjabi uploads must not send Gurmukhi
-  lines to the model; bug #5). Only those lines are sent.
-- Engine: Apple Translation framework, hi→en, batch
-  (`session.translations(from:)`), **`prepareTranslation()` must be called first** (silently hangs
-  /fails otherwise — bug #7). The framework only exposes sessions through SwiftUI's
-  `.translationTask`, so a hidden 320×80 host window (alpha 0.01, screen corner) carries one;
-  it becomes visible+centered only when the one-time language-pack download consent is needed
-  (`LanguageAvailability.status == .supported`). Model runs in a macOS system process — zero RSS
-  cost to the app; zero network.
-- Output validation: each translated line must be `isMostlyLatin`, else the original line is kept
-  (the hi model emits mangled output for scripts it can't read).
+- Configuration: `translate-enabled`, `translate-target` (default `en`), `translate-sources`
+  (default `["hi"]`) — any of the 20 catalog languages. Settings → Translation shows per-pair
+  pack status (Installed / Download… / Unavailable) and is the **only** place a pack download
+  (macOS's consent sheet) is started. A song change never pops the sheet: a pair whose pack is
+  `.supported`-but-not-installed is skipped and the menu status row says
+  "Showing lyrics — Hindi pack not downloaded (Settings → Translation)".
+- Per-line gate = `LanguageGate.plan` (§3): script-table first, Apple's language recognizer only
+  for scripts shared by several enabled languages, and "leave the line alone" on any doubt.
+  Mixed Hindi/Punjabi uploads still never send Gurmukhi to the hi model (bug #5); romanized
+  lines are never planned unless a Latin-script source is enabled, and even then only when the
+  recognizer's *unconstrained* top guess is that language (bug #12).
+- Engine: Apple Translation framework, batch (`session.translations(from:)`),
+  **`prepareTranslation()` must be called first** (silently hangs/fails otherwise — bug #7).
+  The framework only exposes sessions through SwiftUI's `.translationTask`, so a hidden 320×80
+  host window (alpha 0.01, screen corner) carries one; it becomes visible+centered only for a
+  Settings-driven pack download. Model runs in a macOS system process — zero RSS cost to the
+  app; zero network. Jobs are queued FIFO, one in flight (a second request used to be dropped).
+- Output validation: `LanguageGate.isPlausibleOutput` — the line must come back in the target's
+  script, else the original line is kept (models emit mangled output for scripts they can't read).
 - Accepted lines are displayed prefixed **"⇄ "** (monochrome marker, owner-requested, display-only)
-  and the merged display lines are cached at key `…|hi-en-v2` (v2 bumped to abandon pre-validation
-  poison). Translation happens once per song ever; cache replays are instant.
+  and the merged display lines are cached at key `…|tr-<target>-<sources>-v3` (v1/v2 entries are
+  orphaned, not deleted). Translation happens once per song per configuration; replays are instant.
 - The Hindi↔English language pack is installed on this Mac (user consented ~2026-08).
-- Languages: **only hi→en shipped.** Tamil is NOT supported by Apple's on-device translation, and
-  romanized lyrics can't be translated by anything (not recognizable script). This was researched
-  and told to the owner when they asked for translation options.
+- Apple's catalog has no Tamil/Punjabi/Bengali; romanized lyrics can't be translated by anything
+  on-device. Told to the owner when they asked for translation options; README says so too.
 
 ## 6. UX contract
 
@@ -166,7 +204,12 @@ Known data realities (explained to owner, accepted):
 - Menu status row (computed on open, no background refresh):
   Simulating / Spotify is not running / Spotify: <AppleScript error> / Nothing playing /
   Fetching lyrics… / **Lyrics server unreachable** / No synced lyrics for this track /
-  Showing synced lyrics / Paused.
+  Showing synced lyrics / Paused / "Showing lyrics — <Language> pack not downloaded (Settings →
+  Translation)".
+- Settings window (menu → Settings…/About, `--settings` flag; opens itself once on first run):
+  General (mode, launch at login, Spotify automation status + pane shortcut, pill font size &
+  opacity, reset position), Translation (see §5), About (version, Check for Updates…, links).
+  Everything reads on appear or on click — no timers.
 - Sleep/lid: process frozen by OS. Screensaver/lock draw at level ~1000 > our 25 ⇒ overlay hidden.
   Clamshell+external display works normally.
 
@@ -216,8 +259,27 @@ Known data realities (explained to owner, accepted):
    - lsof: `-p PID -i` ORs the selectors (needs `-a` to AND) — unfiltered output misled once.
    - Unified log: `log show --predicate 'process == "translationd"'` to see translation activity;
      none = the task never fired.
+   - The debug binary really lives at `.build/arm64-apple-macosx/debug/LyricPill`
+     (`.build/debug` is a symlink) — `pkill -f .build/debug/LyricPill` misses it; use
+     `pkill -f "debug/LyricPill"`.
+   - CGWindowList on macOS 26 reports window frames minus insets and hides window names without
+     Screen Recording permission — print frames from inside the app when verifying placement.
+   - The first `--translate-check` of a session once returned nil although the pack was
+     installed; every later run worked. Cause unknown (cold `translationd`?); the task's catch
+     now logs `translation failed: <error>` to stderr so the next occurrence is diagnosable.
 10. **Menu-bar settings "duplicates"**: macOS remembers every past menu-bar extra per identity;
     debug runs of the raw binary create ghost rows in System Settings. Harmless, prune on reboot.
+11. **`AEDeterminePermissionToAutomateTarget` hangs with a bundle-id descriptor** on macOS 26
+    (blocks forever on an internal semaphore, even off the main thread). The PID descriptor of
+    the running Spotify answers in ~50 ms; the URL form gives paramErr. So the probe targets by
+    PID, runs on a background queue, and answers "Spotify is not running" before any AE call.
+12. **Constrained `NLLanguageRecognizer` forces a pick**: with `languageConstraints = [id, en]`
+    romanized Hindi came back "Indonesian" at ≥0.5 (probabilities are renormalised over the
+    constraints). Fix: recognise unconstrained and accept the top guess only if it is one of the
+    candidates — text that matches no candidate lands elsewhere and is skipped.
+13. **`NSHostingController` sizing**: with default `sizingOptions` the Settings window was 0×0
+    at `center()` time (landed with its left edge on mid-screen) and grew later. Fix:
+    `sizingOptions = []` + explicit `setContentSize`.
 
 ## 8. Publication / legal (advisor-reviewed 2026-10-12, verdict applied)
 
@@ -233,20 +295,39 @@ Known data realities (explained to owner, accepted):
 - lrclib: free/no-auth API; identifying User-Agent set as they request; lyrics fetched at runtime,
   never redistributed; rights stay with owners (stated in README).
 - Privacy: only artist/title/album/duration leave the machine (to lrclib over HTTPS); translation
-  on-device; no telemetry.
+  on-device; no telemetry. `Check for Updates…` hits api.github.com only on click. Written up for
+  users in `PRIVACY.md` and `SECURITY.md` (private vulnerability reporting link).
+- Signing: releases are Developer-ID-signed (hardened runtime, entitlement
+  `com.apple.security.automation.apple-events`, no sandbox) and notarized **only when the five
+  repo secrets exist** (`docs/release-process.md`); otherwise ad-hoc + "not notarized" in the
+  notes and Gatekeeper "Open Anyway" instructions in the README. The owner has no Apple
+  Developer membership as of 2026-10-23.
+- Spotify brand: still nominative use only; the icon is an original ♫-in-a-pill, no Spotify
+  marks.
 
 ## 9. Install / operate
 
-- `./install.sh`: swift release build → assemble `~/Applications/LyricPill.app` → **ad-hoc codesign**
-  (stable identity so the TCC Automation grant survives rebuilds) → LaunchAgent (RunAtLoad, no
-  KeepAlive so Quit works) → load. Also migrates away the pre-release
-  `SpotifyLyricsOverlay`/`local.spotify-lyrics-overlay` install. `./uninstall.sh` reverses all of it.
+- `scripts/build-app.sh [--version --build --sign --out]`: `swift build -c release` → assemble
+  `build/LyricPill.app` (Info.plist versions via `plutil`, `AppIcon.icns`, `PkgInfo`, `strip -x`)
+  → codesign (**ad-hoc with `--identifier <bundle id>`** so the TCC Automation grant survives
+  rebuilds, or Developer ID with hardened runtime + entitlements) → `codesign --verify --strict`.
+  `scripts/make-dmg.sh APP OUT [--sign]`: `hdiutil` UDZO with an `Applications` symlink +
+  `.sha256`. `scripts/notarize.sh` (CI only), `scripts/release-notes.sh` (CHANGELOG section),
+  `scripts/make-icon.swift` (regenerates `app/AppIcon.icns` — committed, build doesn't need it).
+- `./install.sh`: build-app.sh → quit running app → remove legacy LaunchAgents (both labels) and
+  the pre-release `SpotifyLyricsOverlay` → `cp -R` (no re-sign) to `/Applications` or
+  `~/Applications` → `open`. `./uninstall.sh` reverses all of it (login item entry must be
+  removed in System Settings if it was enabled).
 - First playback after a bundle-id change triggers the one-time
   "LyricPill would like to control Spotify" TCC prompt (`NSAppleEventsUsageDescription` set).
   `tccutil reset AppleEvents <bundle-id>` only works while the bundle resolves.
 - Defaults domain: `io.github.theranjithjayaram.lyric-pill`.
 - Debug: `--simulate f.lrc` (drives overlay, no Spotify), `--engine-check f.lrc` (parse+selection at
-  fixed positions, prints), `--translate-check f.lrc` (detect+translate, prints).
+  fixed positions, prints), `--translate-check f.lrc` (plans with all catalog languages enabled,
+  target en; prints batches/results), `--settings` (opens the Settings window at start).
+- CI: `.github/workflows/ci.yml` (push to main / PRs: build, tests, ad-hoc app + DMG artifact);
+  `release.yml` (tag `v*` = `v$(cat VERSION)`: build, sign, notarize if secrets, GitHub Release
+  with DMG + sha256 + CHANGELOG notes). Runner `macos-15` has full Xcode.
 
 ## 10. Considered and NOT done (with reasons) — the roadmap quarry
 
@@ -263,16 +344,19 @@ Known data realities (explained to owner, accepted):
 - **Other players** (Apple Music etc.) — never requested; the watcher is Spotify-specific
   (notification name + bundle id + AppleScript vocabulary) but the seam is clean: everything behind
   `SpotifyWatcher.Snapshot`.
-- **Generic translation pairs** (configurable source/target + per-script gates) — the hi→en pair
-  and Devanagari gate are constants in `LyricsTranslator`/`AppController`; a bigger app would lift
-  them into a table of (language, script-range, model-pair).
+- **Generic translation pairs** — DONE in 1.0.0 (`TranslationCatalog` + `LanguageGate`, §5).
 - **Popularity-based selection** — impossible; lrclib exposes no vote data.
 - **MediaRemote private framework** for playback state (no TCC prompt) — rejected: private API,
   violates the "documented/standard only" rule.
 - **XCTest/Swift Testing** — unavailable on CLT; revisit if full Xcode ever installed.
-- **App icon, Sparkle updates, notarized DMG, Homebrew tap** — never discussed; natural next steps
-  for public distribution (ad-hoc signing means other users must build from source — that's why
-  install is clone + `./install.sh`).
+- **App icon, DMG, CI release** — DONE in 1.0.0 (§12). **Sparkle** — rejected (third-party
+  framework; invariant 5); on-demand GitHub check instead. **Homebrew cask** — deferred until
+  releases are notarized (casks for unsigned apps need `--no-quarantine` workarounds).
+  **Notarization** — wired up but dormant until the owner buys an Apple Developer membership and
+  adds the secrets.
+- **Register the login item automatically on first run** — not done: a downloaded app silently
+  adding itself to Login Items is presumptuous; the first-run Settings window makes the toggle
+  discoverable instead. (The owner's own install loses RunAtLoad on migration until they flip it.)
 
 ## 11. Where a "bigger app" session should start
 
@@ -285,3 +369,22 @@ Known data realities (explained to owner, accepted):
 - Owner's taste, demonstrated repeatedly: diagnose with live evidence before changing code; honest
   status over silent failure; delete machinery rather than add it; verify end-to-end on the real
   Mac (the app runs on the machine the sessions run on).
+
+## 12. 1.0.0 public-distribution session (2026-10-23)
+
+Owner's brief: "a complete, self-sufficient macOS app people download as a DMG; its own settings
+incl. which translation models to download, multiple languages; security/licensing/bug-free;
+free, open source OK." Done autonomously (away-mode) on branch `worktree-public-distribution`:
+
+- Code: `SettingsStore` + Settings window, login item, Spotify automation probe, on-demand update
+  check, translation generalised (catalog + gate + recognizer), translator job queue, pill style.
+  Tests 72 → 185 (hand-rolled runner, all invented fixtures).
+- Packaging: icon, entitlements, `scripts/*`, CI + Release workflows, rewritten
+  `install.sh`/`uninstall.sh`, `VERSION`.
+- Docs: README (user-facing), CHANGELOG, CONTRIBUTING, SECURITY, PRIVACY,
+  `docs/release-process.md`, issue templates.
+- Judgement calls recorded in away-mode notes: SMAppService replaces the LaunchAgent (default
+  off); no Sparkle; translation never pops the pack-download sheet on its own; MIT stays.
+- **Left for the owner** (needs their accounts/consent): merge the branch, make the repo public,
+  enable Actions write permission + private vulnerability reporting, push tag `v1.0.0`, optionally
+  add the signing secrets. Commands are in `docs/release-process.md` §5 and §1.

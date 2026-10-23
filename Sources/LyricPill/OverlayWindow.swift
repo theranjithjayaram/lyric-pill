@@ -22,7 +22,6 @@ final class OverlayWindow {
     private var center: CGPoint
     private var moveObserver: NSObjectProtocol?
 
-    private static let font = NSFont.systemFont(ofSize: 20, weight: .semibold)
     private static let hPad: CGFloat = 16
     private static let vPad: CGFloat = 8
     private static let bottomOffset: CGFloat = 120
@@ -49,7 +48,7 @@ final class OverlayWindow {
         pill.layer?.cornerRadius = 12
 
         let label = PillLabel(labelWithString: "")
-        label.font = Self.font
+        label.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
         label.textColor = .white
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail
@@ -81,6 +80,21 @@ final class OverlayWindow {
         if panel.isVisible {
             panel.orderOut(nil)
         }
+    }
+
+    /// Text size and pill darkness, from Settings; the pill re-fits around
+    /// its anchored center so the current line doesn't jump.
+    func setStyle(fontSize: CGFloat, opacity: CGFloat) {
+        label.font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(opacity).cgColor
+        layoutToFit()
+    }
+
+    /// Back to the default bottom-center spot (persisted like a drag would be).
+    func resetPosition() {
+        center = Self.defaultCenter()
+        onMoved?(center)
+        layoutToFit()
     }
 
     /// While move mode is on, the panel accepts mouse drags and the controller

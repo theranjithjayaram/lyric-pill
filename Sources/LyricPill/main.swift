@@ -39,12 +39,14 @@ if let flag = CommandLine.arguments.firstIndex(of: "--simulate"),
    flag + 1 < CommandLine.arguments.count {
     simulatePath = CommandLine.arguments[flag + 1]
 }
+// Debug: open the Settings window right at start (verification without clicking).
+let showSettings = CommandLine.arguments.contains("--settings")
 
 let app = NSApplication.shared
 // .accessory keeps us out of the Dock even when run unbundled (`swift run`);
 // the bundled app also sets LSUIElement.
 app.setActivationPolicy(.accessory)
 
-let controller = AppController(simulateLrcPath: simulatePath)
+let controller = AppController(simulateLrcPath: simulatePath, showSettingsAtStart: showSettings)
 controller.start()
 app.run()
