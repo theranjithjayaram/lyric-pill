@@ -33,7 +33,7 @@ jobs:
       TAG: ${{ github.ref_name }}
       HAS_CERT: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
       HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
-      KEYCHAIN: ${{ runner.temp }}/lyricpill-signing.keychain-db
+      # KEYCHAIN is set from the first step: the `runner` context isn't available in job-level env.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +47,7 @@ jobs:
             exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "KEYCHAIN=$RUNNER_TEMP/lyricpill-signing.keychain-db" >> "$GITHUB_ENV"
 
       - name: Swift version
         run: swift --version
