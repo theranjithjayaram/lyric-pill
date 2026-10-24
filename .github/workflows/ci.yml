@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash  # bash -eo pipefail: a failing swift build cannot be masked by a pipe
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift run lyrics-tests
+
+      - name: Assemble app (ad-hoc signed)
+        run: scripts/build-app.sh --out build
+
+      - name: Make DMG
+        run: scripts/make-dmg.sh build/LyricPill.app build/LyricPill-ci.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LyricPill-ci-dmg
+          path: |
+            build/LyricPill-ci.dmg
+            build/LyricPill-ci.dmg.sha256
+          if-no-files-found: error

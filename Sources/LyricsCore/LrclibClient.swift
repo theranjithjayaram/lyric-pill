@@ -18,7 +18,6 @@ public final class LrclibClient {
     public typealias HttpGet = (URL) throws -> (status: Int, body: String)
 
     private static let base = "https://lrclib.net"
-    private static let userAgent = "lyric-pill/1.0 (https://github.com/theranjithjayaram/lyric-pill)"
     private static let missTTL: TimeInterval = 24 * 3600
     /// lrclib under load can take several seconds just to accept a connection.
     private static let requestTimeout: TimeInterval = 15
@@ -35,9 +34,12 @@ public final class LrclibClient {
         case abort  // transport/parse error — not cacheable
     }
 
-    public init(cacheDir: URL, httpGet: @escaping HttpGet = LrclibClient.defaultHttpGet) {
+    /// `appVersion` goes into the User-Agent lrclib asks clients to identify
+    /// with; `httpGet` nil means real HTTPS (tests inject a fake).
+    public init(cacheDir: URL, appVersion: String = "dev", httpGet: HttpGet? = nil) {
         self.cacheDir = cacheDir
-        self.httpGet = httpGet
+        let userAgent = "lyric-pill/\(appVersion) (https://github.com/theranjithjayaram/lyric-pill)"
+        self.httpGet = httpGet ?? { try Self.defaultHttpGet($0, userAgent: userAgent) }
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
     }
 
@@ -199,7 +201,7 @@ public final class LrclibClient {
     private static let session = URLSession(configuration: .ephemeral)
 
     /// Synchronous URLSession wrapper — only ever called on a background queue.
-    public static func defaultHttpGet(_ url: URL) throws -> (status: Int, body: String) {
+    public static func defaultHttpGet(_ url: URL, userAgent: String) throws -> (status: Int, body: String) {
         var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let semaphore = DispatchSemaphore(value: 0)

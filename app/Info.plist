@@ -4,8 +4,12 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>LyricPill</string>
 	<key>CFBundleExecutable</key>
 	<string>LyricPill</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.theranjithjayaram.lyric-pill</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -14,10 +18,17 @@
 	<string>LyricPill</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Placeholders: scripts/build-app.sh overwrites both with plutil. -->
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
@@ -26,5 +37,7 @@
 	<string>Reads the current track and playback position from Spotify to display synced lyrics.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Ranjith Jayaram. MIT License.</string>
 </dict>
 </plist>

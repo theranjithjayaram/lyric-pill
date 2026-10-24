@@ -34,7 +34,8 @@ Result: the two-process daemon + extension design collapses into **one small App
 | Position persistence | `UserDefaults` (center point of the pill) |
 | Modes | Off / On / Auto + Move Mode, same semantics as the original |
 | Tests | Pure-logic units (parser, engine, client) via a self-contained runner (`swift run lyrics-tests`) — CLT ships no XCTest/Swift Testing |
-| Packaging | `install.sh` → ad-hoc-signed `~/Applications/LyricPill.app` + LaunchAgent (RunAtLoad) |
+| Packaging | `scripts/build-app.sh` → signed `LyricPill.app` (ad-hoc locally, Developer ID in CI) → `scripts/make-dmg.sh`; GitHub Release per `v*` tag. Launch-at-login is an `SMAppService` login item toggled in Settings |
+| Settings | SwiftUI `TabView` in one `NSWindow` (General / Translation / About) over a `SettingsStore: ObservableObject` backed by `UserDefaults` |
 
 ## Deviations from the reference implementation
 
@@ -46,10 +47,13 @@ Result: the two-process daemon + extension design collapses into **one small App
 - **Cached misses expire after 24 h** so fresh releases get re-checked once lrclib catches up.
 - **Cleaned-title last-resort search**: annotation suffixes (`(From "Movie")`, `(feat. X)`,
   remaster tags) are stripped and the artist filter dropped, gated to ±10 s duration.
-- **On-device Hindi translation** (macOS 15+, toggleable): Devanagari-script lyrics are batch
-  translated to English via Apple's Translation framework once per song and cached. The
-  framework only exposes sessions through SwiftUI's `.translationTask`, so a tiny invisible
-  host window carries one; it becomes visible only for the one-time model-download consent.
+- **On-device translation** (macOS 15+, configurable): a per-line, rule-based gate
+  (`LanguageGate`) maps each line's dominant script to the enabled source languages — one
+  match ⇒ that model; several (Cyrillic, Latin…) ⇒ Apple's language recognizer must name one,
+  else the line is left alone. Batches go through Apple's Translation framework once per song
+  per configuration and are cached. The framework only exposes sessions through SwiftUI's
+  `.translationTask`, so a tiny invisible host window carries one; it becomes visible only for a
+  language-pack download started from Settings (never mid-song).
   Gotchas: `session.prepareTranslation()` must be called before `translations(from:)`, and the
   translator must not be `@MainActor` (nonisolated callers hard-error even in Swift 5 mode).
 - **`nextBoundaryMs()`** added to the timing engine so the app can sleep until exactly the
