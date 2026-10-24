@@ -10,6 +10,9 @@ versions follow [Semantic Versioning](https://semver.org/).
   migrates pre-1.0 source installs.
 - Translation planning is skipped for already-translated replays, and a queued translation whose
   track has already changed is dropped before the model runs.
+- Translation orchestration is one pure, tested module. A song whose translation came back
+  incomplete (a language pack not yet downloaded, a transient failure) is shown as far as it got
+  but no longer cached that way — downloading the pack later now takes effect on the next play.
 
 ### Fixed
 - Settings → Translation: the *Translate from* switches now line up in one column.

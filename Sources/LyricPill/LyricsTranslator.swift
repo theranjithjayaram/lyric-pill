@@ -3,22 +3,6 @@ import LyricsCore
 import SwiftUI
 import Translation
 
-/// One source→target pair's language-pack state, free of Translation-framework
-/// types so macOS 13 code (the Settings view) can use it.
-enum PackStatus {
-    case installed, downloadable, unsupported
-}
-
-/// What a translate job came back with; the caller keeps its original lines
-/// for anything but `.translated`.
-enum TranslateOutcome {
-    case translated([String])
-    case packNotDownloaded  // the pair exists, its pack isn't on this Mac
-    case unsupported
-    case failed             // framework error, or the deadline
-    case skipped            // the caller's `skipIf` said nobody wants the result
-}
-
 /// On-device translation of lyric lines via Apple's Translation framework
 /// (macOS 15+), one source→target pair per job, jobs run one at a time in
 /// order. The framework only hands out sessions through a SwiftUI
@@ -270,65 +254,3 @@ final class LyricsTranslator {
     }
 }
 
-/// Debug entry (`--translate-check file.lrc`): plan batches with every catalog
-/// language enabled (target English), translate each, print.
-@available(macOS 15.0, *)
-enum TranslateCheck {
-    // Keeps the translator (and its host window) alive for the app's lifetime.
-    private static var retained: LyricsTranslator?
-
-    static func run(lrcPath: String) -> Never {
-        guard let text = try? String(contentsOfFile: lrcPath, encoding: .utf8) else {
-            warn("cannot read \(lrcPath)")
-            exit(1)
-        }
-        let lines = LrcParser.parse(text)
-        let texts = lines.map(\.text)
-        let target = "en"
-        let batches = LanguageGate.plan(
-            lines: texts, enabledSources: Set(TranslationCatalog.languages.map(\.id)),
-            target: target, recognizer: AppleLanguageRecognizer.recognize)
-        warn("lines: \(lines.count), batches: \(batches.count)")
-        let planned = Set(batches.flatMap(\.indices))
-        for (index, line) in lines.enumerated() where !planned.contains(index) {
-            print("[\(line.ms)ms] left alone: \(line.text)")
-        }
-        guard !batches.isEmpty else {
-            print("nothing to translate — would be shown as-is")
-            exit(0)
-        }
-        let translator = LyricsTranslator()
-        retained = translator
-        var remaining = batches.count
-        DispatchQueue.main.async {
-            for batch in batches {
-                print("batch \(batch.source) → \(target): lines \(batch.indices)")
-                translator.translate(lines: batch.indices.map { texts[$0] },
-                                     from: batch.source, to: target) { outcome in
-                    switch outcome {
-                    case .translated(let translated):
-                        for (j, index) in batch.indices.enumerated() where j < translated.count {
-                            let accepted = LanguageGate.isPlausibleOutput(translated[j], target: target)
-                            print("[\(lines[index].ms)ms] \(batch.source): \(texts[index]) → "
-                                  + translated[j] + (accepted ? "" : "  (rejected: not \(target))"))
-                        }
-                    case .packNotDownloaded:
-                        print("batch \(batch.source) → \(target): pack not downloaded")
-                    case .unsupported:
-                        print("batch \(batch.source) → \(target): pair unsupported")
-                    case .failed:
-                        print("batch \(batch.source) → \(target): translation failed")
-                    case .skipped:
-                        print("batch \(batch.source) → \(target): skipped")
-                    }
-                    remaining -= 1
-                    if remaining == 0 {
-                        exit(0)
-                    }
-                }
-            }
-        }
-        NSApplication.shared.run()
-        fatalError("unreachable")
-    }
-}
