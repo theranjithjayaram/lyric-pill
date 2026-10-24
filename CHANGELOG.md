@@ -5,6 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Project website at https://theranjithjayaram.github.io/lyric-pill/ (static, no dependencies),
+  deployed from `site/` by GitHub Pages.
+- Debug flags `--snapshot-settings out.png [tab]` and `--snapshot-pill out.png` render the app's own
+  interface to PNGs (the website's pictures).
+
 ### Changed
 - `install.sh` builds only the Mac's own architecture (the DMG stays universal) and no longer
   migrates pre-1.0 source installs.

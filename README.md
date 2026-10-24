@@ -12,6 +12,7 @@ One native macOS menu-bar app. Swift + AppKit, **zero third-party dependencies**
 no API keys, no telemetry. Free and open source (MIT).
 
 [![CI](https://github.com/theranjithjayaram/lyric-pill/actions/workflows/ci.yml/badge.svg)](https://github.com/theranjithjayaram/lyric-pill/actions/workflows/ci.yml)
+· [Website](https://theranjithjayaram.github.io/lyric-pill/)
 · [Latest release](https://github.com/theranjithjayaram/lyric-pill/releases/latest)
 
 ## Features

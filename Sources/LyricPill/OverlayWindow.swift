@@ -97,6 +97,14 @@ final class OverlayWindow {
         layoutToFit()
     }
 
+    /// Debug (`--snapshot-pill`): render the pill to a PNG with transparency.
+    func snapshot(to path: String) {
+        guard let rep = pill.bitmapImageRepForCachingDisplay(in: pill.bounds) else { return }
+        pill.cacheDisplay(in: pill.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?
+            .write(to: URL(fileURLWithPath: path))
+    }
+
     /// While move mode is on, the panel accepts mouse drags and the controller
     /// stops pushing line updates, so every didMove is a user drag.
     func setMoveMode(_ enabled: Bool) {

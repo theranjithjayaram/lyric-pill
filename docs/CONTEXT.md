@@ -18,6 +18,13 @@ default). Swift + AppKit, zero third-party dependencies.
 - Distribution (since 1.0.0, see §12): DMG built by GitHub Actions on `v*` tags; `VERSION` file
   is the single source of truth; `scripts/build-app.sh` + `scripts/make-dmg.sh` reproduce it
   locally. Users install from the DMG or `./install.sh`.
+- Website: https://theranjithjayaram.github.io/lyric-pill/ — static `site/` (one HTML, one CSS,
+  one JS, no dependencies), deployed by `.github/workflows/pages.yml` on pushes to `main`
+  (GitHub Pages, source "GitHub Actions"). The download button resolves the latest DMG from the
+  GitHub releases API on load and falls back to the releases page. Built with the owner's
+  `.agents/skills/design-taste-frontend` run (direction "The product performs"; working files in
+  `.taste-skill/`, git-ignored). The pictures on it are rendered by the app itself:
+  `--snapshot-settings out.png [general|translation|about]` and `--snapshot-pill out.png`.
 - Installed at `/Applications/LyricPill.app` (or `~/Applications` when `/Applications` isn't
   writable); launch-at-login is the app's own `SMAppService` login item (Settings → General).
   The pre-1.0 LaunchAgent plist `io.github.theranjithjayaram.lyric-pill` is removed by
