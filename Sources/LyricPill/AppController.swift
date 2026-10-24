@@ -48,9 +48,6 @@ final class AppController {
     private let showSettingsAtStart: Bool
 
     private static let resyncInterval: TimeInterval = 10
-    // Prefixes every translated line. Baked into the cached display lines, so
-    // changing it means a cache-key bump (LanguageGate.cacheKeySuffix).
-    private static let translatedMarker = "⇄ "
 
     // Type-erased because LyricsTranslator is macOS 15+ while the app targets 13.
     private var translatorStorage: Any?
@@ -255,78 +252,51 @@ final class AppController {
         render()
     }
 
-    // MARK: - Translation (per-line language gate → on-device models)
+    // MARK: - Translation (the display-lines pipeline decides; this runs it)
 
     private func translateIfNeeded(gen: Int, lines: [LrcLine]) {
         guard store.translateEnabled, #available(macOS 15.0, *) else { return }
-        let target = store.translateTarget
-        let sources = Set(store.translateSources)
-
-        // v3: display lines (with ⇄ markers baked in), keyed by the enabled
-        // pairs — v1 cached raw model output unvalidated, v2 was hi→en only;
-        // both are simply abandoned. Checked before the gate: a replay must
-        // not run the recognizer again for lines already translated.
-        let suffix = LanguageGate.cacheKeySuffix(enabledSources: sources, target: target)
-        let cachePath = lrclib.cachePath(for: currentFetchKey + "|" + suffix)
-        if let cached = try? String(contentsOf: cachePath, encoding: .utf8), !cached.isEmpty {
-            engine.setLines(LrcParser.parse(cached))
-            updateTimers()
-            render()
-            return
-        }
-
-        // Per-line gate: uploads mix scripts (e.g. Hindi verses in Devanagari
-        // with Punjabi hook lines in Gurmukhi) — each line goes only to the
-        // model its own script (plus the recognizer, for shared scripts) names.
-        let batches = LanguageGate.plan(
-            lines: lines.map(\.text), enabledSources: sources, target: target,
+        let config = DisplayLines.Config(sources: Set(store.translateSources), target: store.translateTarget)
+        // The display cache is a sibling file of the track's lyrics in
+        // lrclib's directory; the pipeline composes the key, we do the I/O.
+        let plan = DisplayLines.plan(
+            lines: lines, config: config, trackKey: currentFetchKey,
+            lookup: { try? String(contentsOf: lrclib.cachePath(for: $0), encoding: .utf8) },
             recognizer: AppleLanguageRecognizer.recognize)
-        guard !batches.isEmpty else { return }
-
-        // Original lines stay on screen while the batches run (~1-2 s each);
-        // timestamps are preserved, only accepted texts are swapped.
-        runTranslation(batches: batches[...], target: target, gen: gen,
-                       lines: lines, display: lines, cachePath: cachePath)
-    }
-
-    /// One batch at a time; `display` accumulates accepted lines until the
-    /// last batch, which commits (cache + engine + render) if anything changed.
-    @available(macOS 15.0, *)
-    private func runTranslation(batches: ArraySlice<TranslationBatch>, target: String, gen: Int,
-                                lines: [LrcLine], display: [LrcLine], cachePath: URL) {
-        guard gen == trackGen else { return }
-        guard let batch = batches.first else {
-            guard display != lines else { return }  // nothing accepted — keep originals
-            engine.setLines(display)
-            try? Data(LrcParser.serialize(display).utf8).write(to: cachePath, options: .atomic)
-            updateTimers()
-            render()
-            return
-        }
-        translator.translate(lines: batch.indices.map { lines[$0].text },
-                             from: batch.source, to: target,
-                             skipIf: { [weak self] in gen != self?.trackGen }) { [weak self] outcome in
-            guard let self, gen == self.trackGen else { return }
-            var display = display
-            switch outcome {
-            case .translated(let texts):
-                for (j, index) in batch.indices.enumerated() where j < texts.count {
-                    // Accept only output that reads as the target language;
-                    // the marked line tells the user it's our translation.
-                    if LanguageGate.isPlausibleOutput(texts[j], target: target) {
-                        display[index] = LrcLine(ms: lines[index].ms, text: Self.translatedMarker + texts[j])
+        switch plan {
+        case .cached(let display):
+            setDisplayLines(display)
+        case .nothing:
+            break
+        case .translate(let batches, let cacheKey):
+            // All batches go on the translator's FIFO at once; the originals
+            // stay on screen until the last answer, then the result commits.
+            var outcomes: [(batch: TranslationBatch, outcome: TranslateOutcome)] = []
+            for batch in batches {
+                translator.translate(lines: batch.indices.map { lines[$0].text },
+                                     from: batch.source, to: config.target,
+                                     skipIf: { [weak self] in gen != self?.trackGen }) { [weak self] outcome in
+                    outcomes.append((batch, outcome))
+                    guard let self, outcomes.count == batches.count, gen == self.trackGen else { return }
+                    let result = DisplayLines.assemble(lines: lines, config: config, outcomes: outcomes)
+                    self.translationSkippedPacks = result.skippedPacks  // status row
+                    if let text = result.cacheText {
+                        try? Data(text.utf8).write(to: self.lrclib.cachePath(for: cacheKey), options: .atomic)
+                    }
+                    // A partial result (missing pack, transient failure) is
+                    // still shown this play; it just isn't frozen.
+                    if result.display != lines {
+                        self.setDisplayLines(result.display)
                     }
                 }
-            case .packNotDownloaded:
-                // A pack that exists but isn't downloaded is never fetched from
-                // here (no consent sheet mid-song): note it for the status row.
-                self.translationSkippedPacks.append(batch.source)
-            case .unsupported, .failed, .skipped:
-                break
             }
-            self.runTranslation(batches: batches.dropFirst(), target: target, gen: gen,
-                                lines: lines, display: display, cachePath: cachePath)
         }
+    }
+
+    private func setDisplayLines(_ display: [LrcLine]) {
+        engine.setLines(display)
+        updateTimers()
+        render()
     }
 
     // MARK: - Scheduling

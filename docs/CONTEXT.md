@@ -85,11 +85,26 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     <sorted effective sources>-v3`).
   - `AppleLanguageRecognizer.swift` — `NLLanguageRecognizer` **unconstrained**, top hypothesis
     accepted only if ≥0.5 *and* among the candidates (see bug #12).
+  - `DisplayLines.swift` — **the display-lines pipeline** (deepened 2026-10-24): two pure entry
+    points. `plan(lines:config:trackKey:lookup:recognizer:)` → `.cached(lines)` (the `lookup`
+    port — file read in prod, dictionary in tests — hit, so neither the gate nor a model runs) |
+    `.translate(batches:cacheKey:)` | `.nothing`; the cache key `trackKey|<gate suffix>` is
+    composed here and nowhere else. `assemble(lines:config:outcomes:)` → `Assembly { display,
+    skippedPacks, cacheText? }`: accepts only `isPlausibleOutput` texts, applies the `⇄ ` marker
+    (owned here), maps by index, and sets `cacheText` only when something was accepted *and* every
+    outcome was deterministic (`.translated`/`.unsupported`; a missing pack, `.failed` or `.skipped`
+    shows a partial display this play but is never frozen). The controller and `--translate-check`
+    both drive it; 25 tests at its interface, incl. the bug #5 regression end-to-end.
+  - `TranslationOutcome.swift` — `PackStatus` and `TranslateOutcome`, the pure vocabulary the
+    translator answers in (the framework enum never leaves `LyricsTranslator`).
   - `SemanticVersion.swift` — `Comparable`, parses `v1.2.3`/`1.2`/`1.2.3-beta`; used by the
     update check.
 - **LyricPill** (executable, AppKit, main-thread-by-convention — **no `@MainActor`**, see bug #7):
-  - `main.swift` — single-instance guard (bundle id); flags `--simulate <lrc>`,
-    `--translate-check <lrc>`, `--engine-check <lrc>`; `.accessory` activation.
+  - `main.swift` — single-instance guard (bundle id); `value(after:)` flag parsing (a bare flag
+    exits 2); `.accessory` activation; dispatches to `DebugCommands`.
+  - `DebugCommands.swift` — `engineCheck`, `translateCheck` (a printer over the display-lines
+    pipeline: left-alone lines, batches, raw answers with rejection marks, final display, skipped
+    packs, cache decision), `snapshotSettings`.
   - `AppController.swift` — wiring + scheduling + render + translation orchestration.
   - `SpotifyWatcher.swift` — distributed notification observer; NSWorkspace launch/terminate
     observers for `com.spotify.client`; `refresh()` runs one compiled NSAppleScript returning
@@ -109,8 +124,9 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     `TranslateOutcome` (`translated / packNotDownloaded / unsupported / failed / skipped`) and a
     not-downloaded pack never reaches `prepareTranslation()`; `skipIf` lets the controller drop a
     job whose track already changed before the model runs. `availability(from:to:) → PackStatus`
-    (the framework enum never leaves this file), `downloadLanguagePack(from:to:)` (the only path
-    that shows the consent sheet), `supportedLanguageIDs`; + `TranslateCheck` runner.
+    (the framework enum never leaves this file; `PackStatus`/`TranslateOutcome` live in
+    LyricsCore), `downloadLanguagePack(from:to:)` (the only path that shows the consent sheet),
+    `supportedLanguageIDs`.
   - `Settings.swift` — `SettingsStore: ObservableObject` (`.shared`), `@Published` + UserDefaults:
     `mode` (auto), `center-x/y`, `translate-enabled` (true; migrated once from `translate-hindi`),
     `translate-sources` (`["hi"]`), `translate-target` (`"en"`), `pill-font-size` (20, 14…36),
@@ -196,11 +212,15 @@ Known data realities (explained to owner, accepted):
   app; zero network. Jobs are queued FIFO, one in flight (a second request used to be dropped).
 - Output validation: `LanguageGate.isPlausibleOutput` — the line must come back in the target's
   script, else the original line is kept (models emit mangled output for scripts they can't read).
-- Accepted lines are displayed prefixed **"⇄ "** (monochrome marker, owner-requested). The marker
-  is baked into the cached display lines at key `…|tr-<target>-<sources>-v3` (so changing the glyph
-  means a key bump; v1/v2 entries are orphaned, not deleted). The cache is consulted *before* the
-  language gate runs, so a replay never pays for planning. Translation happens once per song per
-  configuration; replays are instant.
+- Everything between "lyrics arrived" and "engine shows these lines" is `DisplayLines` (§3):
+  accepted lines are displayed prefixed **"⇄ "** (monochrome marker, owner-requested), baked into
+  the cached display lines at key `…|tr-<target>-<sources>-v3` (changing the glyph means a key
+  bump; v1/v2 entries are orphaned, not deleted). The cache is consulted *before* the gate runs,
+  so a replay never pays for planning. **Cache policy (2026-10-24):** a result is frozen only when
+  something was accepted and every batch answered deterministically; a missing pack or a transient
+  failure is shown as far as it got this play and planned again next play — so downloading a pack
+  later takes effect, and a deadline never freezes a half-translated song. The controller enqueues
+  all batches on the translator's FIFO at once and commits once, when the last answers.
 - The Hindi↔English language pack is installed on this Mac (user consented ~2026-08).
 - Apple's catalog has no Tamil/Punjabi/Bengali; romanized lyrics can't be translated by anything
   on-device. Told to the owner when they asked for translation options; README says so too.
@@ -427,3 +447,11 @@ free, open source OK." Done autonomously (away-mode) on branch `worktree-public-
   Settings no longer builds the translator eagerly; scripts derive the bundle id from Info.plist,
   drop the pre-1.0 shims, and `install.sh` builds the native arch only. Runtime verification
   recipe: `.claude/skills/verify/SKILL.md`.
+- Architecture review (2026-10-24, `/improve-codebase-architecture`): LyricsCore is the deep half
+  (clock, HttpGet, recognizer, SettingsServices — real two-adapter seams); the app target is thin
+  adapters over AppKit/Translation, which is right, except that `AppController`'s *decisions* were
+  computed inline and untestable (the test runner can only import LyricsCore). Candidate 1
+  (display-lines pipeline) was grilled and implemented — see `DisplayLines` in §3. Remaining
+  candidates, in order: the presentation-and-wake decision (pill visibility / timers / status row
+  as one value-in→value-out step, turning §2.2 into a property test), the translator queue split
+  from its SwiftUI host (pins bug #14), the update-check outcome mapping next to `SemanticVersion`.
