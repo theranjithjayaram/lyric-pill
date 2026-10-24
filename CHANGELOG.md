@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-10-24
+
 ### Added
 - Project website at https://theranjithjayaram.github.io/lyric-pill/ (static, no dependencies),
   deployed from `site/` by GitHub Pages.
@@ -58,5 +60,6 @@ First public release.
 - A translation requested while another was still running was silently dropped (e.g. when
   skipping quickly between songs); requests are now queued.
 
-[Unreleased]: https://github.com/theranjithjayaram/lyric-pill/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/theranjithjayaram/lyric-pill/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/theranjithjayaram/lyric-pill/releases/tag/v1.0.1
 [1.0.0]: https://github.com/theranjithjayaram/lyric-pill/releases/tag/v1.0.0
