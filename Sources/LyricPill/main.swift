@@ -42,6 +42,33 @@ if let flag = CommandLine.arguments.firstIndex(of: "--simulate"),
 // Debug: open the Settings window right at start (verification without clicking).
 let showSettings = CommandLine.arguments.contains("--settings")
 
+// Debug: render the Settings window (Translation tab, fake pack statuses) to a
+// PNG and exit — layout checks on a Mac without Screen Recording permission.
+if let flag = CommandLine.arguments.firstIndex(of: "--snapshot-settings"),
+   flag + 1 < CommandLine.arguments.count {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let output = CommandLine.arguments[flag + 1]
+    var services = SettingsServices(resetPillPosition: {}, translation: nil)
+    services.translation = SettingsServices.Translation(
+        supportedLanguageIDs: { Set(TranslationCatalog.languages.map(\.id)) },
+        packStatus: { source, _ in
+            switch source {
+            case "hi": .installed
+            case "ar": .unsupported
+            default: .downloadable
+            }
+        },
+        downloadPack: { _, _, completion in completion(false) })
+    let settings = SettingsWindowController(services: services)
+    settings.show(tab: .translation)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {  // let .task load statuses
+        settings.snapshot(to: output)
+        exit(0)
+    }
+    app.run()
+}
+
 let app = NSApplication.shared
 // .accessory keeps us out of the Dock even when run unbundled (`swift run`);
 // the bundled app also sets LSUIElement.

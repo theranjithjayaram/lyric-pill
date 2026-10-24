@@ -342,7 +342,9 @@ Known data realities (explained to owner, accepted):
 - Defaults domain: `io.github.theranjithjayaram.lyric-pill`.
 - Debug: `--simulate f.lrc` (drives overlay, no Spotify), `--engine-check f.lrc` (parse+selection at
   fixed positions, prints), `--translate-check f.lrc` (plans with all catalog languages enabled,
-  target en; prints batches/results), `--settings` (opens the Settings window at start).
+  target en; prints batches/results), `--settings` (opens the Settings window at start),
+  `--snapshot-settings out.png` (renders the Translation tab with fake pack statuses to a PNG
+  and exits — the way to check layout here, since `screencapture` needs Screen Recording).
 - CI: `.github/workflows/ci.yml` (push to main / PRs: build, tests, ad-hoc app + DMG artifact);
   `release.yml` (tag `v*` = `v$(cat VERSION)`: build, sign, notarize if secrets, GitHub Release
   with DMG + sha256 + CHANGELOG notes). Runner `macos-15` has full Xcode.

@@ -70,6 +70,16 @@ final class SettingsWindowController {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Debug (`--snapshot-settings`): render the window's content to a PNG —
+    /// the way to eyeball layout on a Mac without Screen Recording permission.
+    func snapshot(to path: String) {
+        guard let view = window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?
+            .write(to: URL(fileURLWithPath: path))
+    }
+
     private struct SettingsView: View {
         @ObservedObject var store: SettingsStore
         @ObservedObject var selection: TabSelection
@@ -185,6 +195,9 @@ private struct TranslationTab: View {
     @State private var statuses: [String: PackStatus] = [:]
     @State private var downloading: Set<String> = []
 
+    // Wide enough for the "Downloading…" button, so the switch column never moves.
+    private static let statusColumnWidth: CGFloat = 124
+
     var body: some View {
         if let services {
             form(services)
@@ -205,11 +218,19 @@ private struct TranslationTab: View {
 
             Section("Translate from") {
                 ForEach(sources, id: \.id) { language in
+                    // Name, then two fixed trailing columns (switch, pack
+                    // status): a labelled Toggle next to a Spacer let each
+                    // row place its switch wherever its label and status
+                    // widths happened to leave it.
                     HStack {
-                        Toggle(language.name, isOn: sourceEnabled(language.id))
-                            .disabled(statuses[language.id] == .unsupported)
+                        Text(language.name)
                         Spacer()
+                        Toggle(language.name, isOn: sourceEnabled(language.id))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .disabled(statuses[language.id] == .unsupported)
                         packView(language.id, services)
+                            .frame(width: Self.statusColumnWidth, alignment: .trailing)
                     }
                 }
             }
