@@ -21,10 +21,17 @@ default). Swift + AppKit, zero third-party dependencies.
 - Website: https://theranjithjayaram.github.io/lyric-pill/ — static `site/` (one HTML, one CSS,
   one JS, no dependencies), deployed by `.github/workflows/pages.yml` on pushes to `main`
   (GitHub Pages, source "GitHub Actions"). The download button resolves the latest DMG from the
-  GitHub releases API on load and falls back to the releases page. Built with the owner's
-  `.agents/skills/design-taste-frontend` run (direction "The product performs"; working files in
-  `.taste-skill/`, git-ignored). The pictures on it are rendered by the app itself:
-  `--snapshot-settings out.png [general|translation|about]` and `--snapshot-pill out.png`.
+  GitHub releases API on load and falls back to the releases page. A first, art-directed version
+  (`.agents/skills/design-taste-frontend`, direction "The product performs") overlapped at common
+  laptop viewports (absolutely positioned hero stage) and the owner found it too complex; it was
+  replaced the same day by a plain page in normal document flow — centred hero, feature cards,
+  the real Settings screenshots, numbered install steps, measured numbers, footer; system font,
+  light with automatic dark mode. Owner's standing preference for the site: **minimal, modern,
+  generic; nothing positioned absolutely.** The pictures on it are rendered by the app itself
+  (`--snapshot-settings out.png [general|translation|about]`, `--snapshot-pill out.png`) — run them
+  from a *bundled* build with the installed app quit, or the single-instance guard exits silently
+  and the About tab reads "Version dev". Verify layouts with the skill's `inspect.mjs` (real device
+  emulation); headless Chrome's `--window-size=390,…` clamps to a wider minimum and crops.
 - Installed at `/Applications/LyricPill.app` (or `~/Applications` when `/Applications` isn't
   writable); launch-at-login is the app's own `SMAppService` login item (Settings → General).
   The pre-1.0 LaunchAgent plist `io.github.theranjithjayaram.lyric-pill` is removed by
