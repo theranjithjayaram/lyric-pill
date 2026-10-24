@@ -40,6 +40,11 @@ public enum TranslationCatalog {
         languages.first { $0.id == id }
     }
 
+    /// Display name, falling back to the id for anything outside the catalog.
+    public static func name(for id: String) -> String {
+        language(for: id)?.name ?? id
+    }
+
     /// Catalog languages written in `script`, in catalog order.
     public static func candidates(for script: Script) -> [String] {
         languages.filter { $0.script == script }.map(\.id)

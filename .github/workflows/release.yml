@@ -100,12 +100,7 @@ jobs:
         run: scripts/notarize.sh build/LyricPill.app
 
       - name: Make DMG
-        run: |
-          if [ -n "${IDENTITY:-}" ]; then
-            scripts/make-dmg.sh build/LyricPill.app "build/LyricPill-$VERSION.dmg" --sign "$IDENTITY"
-          else
-            scripts/make-dmg.sh build/LyricPill.app "build/LyricPill-$VERSION.dmg"
-          fi
+        run: scripts/make-dmg.sh build/LyricPill.app "build/LyricPill-$VERSION.dmg" --sign "${IDENTITY:--}"
 
       - name: Notarize DMG
         if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true'

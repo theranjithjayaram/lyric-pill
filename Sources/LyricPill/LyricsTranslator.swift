@@ -3,6 +3,22 @@ import LyricsCore
 import SwiftUI
 import Translation
 
+/// One source→target pair's language-pack state, free of Translation-framework
+/// types so macOS 13 code (the Settings view) can use it.
+enum PackStatus {
+    case installed, downloadable, unsupported
+}
+
+/// What a translate job came back with; the caller keeps its original lines
+/// for anything but `.translated`.
+enum TranslateOutcome {
+    case translated([String])
+    case packNotDownloaded  // the pair exists, its pack isn't on this Mac
+    case unsupported
+    case failed             // framework error, or the deadline
+    case skipped            // the caller's `skipIf` said nobody wants the result
+}
+
 /// On-device translation of lyric lines via Apple's Translation framework
 /// (macOS 15+), one source→target pair per job, jobs run one at a time in
 /// order. The framework only hands out sessions through a SwiftUI
@@ -14,14 +30,28 @@ import Translation
 @available(macOS 15.0, *)
 final class LyricsTranslator {
     private enum Work {
-        case translate([String], ([String]?) -> Void)
+        case translate(lines: [String], skipIf: () -> Bool, completion: (TranslateOutcome) -> Void)
         case download((Bool) -> Void)
     }
 
-    private struct Job {
+    private enum JobResult {
+        case translate(TranslateOutcome)
+        case download(installed: Bool)
+    }
+
+    // A class, so the in-flight job has an identity: a late or duplicate
+    // answer (a task SwiftUI cancelled, or one that fires after the deadline)
+    // is told apart from the current job by `===`.
+    private final class Job {
         let source: String  // catalog ids
         let target: String
         let work: Work
+
+        init(source: String, target: String, work: Work) {
+            self.source = source
+            self.target = target
+            self.work = work
+        }
     }
 
     private final class Model: ObservableObject {
@@ -64,7 +94,7 @@ final class LyricsTranslator {
                         let result = out
                         await MainActor.run { completion(result) }
                     } catch {
-                        FileHandle.standardError.write(Data("translation failed: \(error)\n".utf8))
+                        warn("translation failed: \(error)")
                         await MainActor.run { completion(nil) }
                     }
                 }
@@ -73,14 +103,11 @@ final class LyricsTranslator {
 
     private let model = Model()
     private let window: NSWindow
-    // FIFO: one job in flight, the next starts when it completes — songs can
-    // change faster than a translation finishes, and dropping the second
-    // request would silently skip that song.
+    // FIFO: `current` is in flight, `queue` waits; the next starts when the
+    // current completes — songs can change faster than a translation
+    // finishes, and dropping the second request would silently skip that song.
     private var queue: [Job] = []
-    private var busy = false
-    // Identifies the in-flight job, so a late or duplicate answer (a task
-    // SwiftUI cancelled, or one that fires after the deadline) is ignored.
-    private var jobGen = 0
+    private var current: Job?
     // A translate job that never answers (translationd wedged) would block
     // every later translation and pack download for the process lifetime, so
     // each one gets a single one-shot deadline — no repeating machinery.
@@ -98,11 +125,14 @@ final class LyricsTranslator {
     }
 
     /// Translates line-by-line; empty lines pass through. Calls back on the
-    /// main thread with nil when translation isn't possible (pair unsupported,
-    /// pack not downloaded, framework error) — caller keeps the original.
+    /// main thread. `skipIf` is asked just before the job runs — a result
+    /// nobody wants any more (the track changed while it waited) never costs
+    /// a model run.
     func translate(lines: [String], from source: String, to target: String,
-                   completion: @escaping ([String]?) -> Void) {
-        enqueue(Job(source: source, target: target, work: .translate(lines, completion)))
+                   skipIf: @escaping () -> Bool = { false },
+                   completion: @escaping (TranslateOutcome) -> Void) {
+        enqueue(Job(source: source, target: target,
+                    work: .translate(lines: lines, skipIf: skipIf, completion: completion)))
     }
 
     /// Shows the host window and lets macOS ask for the pack download; true
@@ -112,9 +142,16 @@ final class LyricsTranslator {
         enqueue(Job(source: source, target: target, work: .download(completion)))
     }
 
-    func availability(from source: String, to target: String) async -> LanguageAvailability.Status {
-        await LanguageAvailability().status(
+    /// The pair's pack state. The framework's own status enum is mapped here
+    /// and never leaves this file.
+    func availability(from source: String, to target: String) async -> PackStatus {
+        let status = await LanguageAvailability().status(
             from: Locale.Language(identifier: source), to: Locale.Language(identifier: target))
+        switch status {
+        case .installed: return .installed
+        case .supported: return .downloadable  // the pack exists, not downloaded
+        default: return .unsupported
+        }
     }
 
     /// Catalog ids macOS can translate between (as source or target).
@@ -133,58 +170,67 @@ final class LyricsTranslator {
     }
 
     private func startNextIfIdle() {
-        guard !busy, let job = queue.first else { return }
-        busy = true
-        jobGen += 1
-        let gen = jobGen
+        guard current == nil, !queue.isEmpty else { return }
+        let job = queue.removeFirst()
+        current = job
         Task { @MainActor in
-            let status = await self.availability(from: job.source, to: job.target)
             switch job.work {
-            case .translate(let lines, _):
-                // .supported = pack not downloaded. A song change must never
-                // pop the consent sheet — downloads are started from Settings.
-                guard status == .installed else {
-                    self.complete(gen, lines: nil)
+            case .translate(let lines, let skipIf, _):
+                // Asked first: the model must not run for a result nobody wants.
+                if skipIf() {
+                    self.complete(job, .translate(.skipped))
                     return
                 }
-                self.show(interactive: false)
-                self.run(job, lines: lines) { [weak self] result in
-                    self?.complete(gen, lines: result)
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.translateTimeout) { [weak self] in
-                    guard let self, self.busy, gen == self.jobGen else { return }
-                    FileHandle.standardError.write(
-                        Data("translation timed out: \(job.source) → \(job.target)\n".utf8))
-                    self.complete(gen, lines: nil)
+                switch await self.availability(from: job.source, to: job.target) {
+                case .downloadable:
+                    // A song change must never pop the consent sheet —
+                    // downloads are started from Settings.
+                    self.complete(job, .translate(.packNotDownloaded))
+                case .unsupported:
+                    self.complete(job, .translate(.unsupported))
+                case .installed:
+                    self.parkInvisible()
+                    self.run(job, lines: lines) { [weak self] result in
+                        self?.complete(job, .translate(result.map(TranslateOutcome.translated) ?? .failed))
+                    }
+                    // `weak job` on purpose: a finished job must be free to
+                    // deallocate (it holds the caller's lines and closures);
+                    // a live one is retained by `current`.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.translateTimeout) { [weak self, weak job] in
+                        guard let self, let job, self.current === job else { return }
+                        warn("translation timed out: \(job.source) → \(job.target)")
+                        self.complete(job, .translate(.failed))
+                    }
                 }
             case .download:
-                guard status == .supported else {  // already installed, or unsupported
-                    self.complete(gen, installed: status == .installed)
+                let status = await self.availability(from: job.source, to: job.target)
+                guard status == .downloadable else {  // already installed, or unsupported
+                    self.complete(job, .download(installed: status == .installed))
                     return
                 }
-                self.show(interactive: true)
+                self.showForConsent()
                 self.run(job, lines: []) { [weak self] _ in
                     Task { @MainActor in
                         guard let self else { return }
                         let now = await self.availability(from: job.source, to: job.target)
-                        self.complete(gen, installed: now == .installed)
+                        self.complete(job, .download(installed: now == .installed))
                     }
                 }
             }
         }
     }
 
-    /// Ends the in-flight job exactly once (a stale gen is a late or duplicate
-    /// answer), hands its result to the caller, and starts the next.
-    private func complete(_ gen: Int, lines: [String]? = nil, installed: Bool = false) {
-        guard busy, gen == jobGen, let job = queue.first else { return }
+    /// Ends `job` exactly once (anything but the in-flight job is a late or
+    /// duplicate answer), hands its result to the caller, and starts the next.
+    private func complete(_ job: Job, _ result: JobResult) {
+        guard current === job else { return }
+        current = nil
         window.orderOut(nil)
         model.job = nil  // a task that hasn't picked this job up yet finds nothing
-        queue.removeFirst()
-        busy = false
-        switch job.work {
-        case .translate(_, let completion): completion(lines)
-        case .download(let completion): completion(installed)
+        switch (job.work, result) {
+        case (.translate(_, _, let completion), .translate(let outcome)): completion(outcome)
+        case (.download(let completion), .download(let installed)): completion(installed)
+        default: break  // kinds never cross: each branch above builds its own result
         }
         startNextIfIdle()
     }
@@ -194,7 +240,8 @@ final class LyricsTranslator {
     private func run(_ job: Job, lines: [String], completion: @escaping ([String]?) -> Void) {
         let source = Locale.Language(identifier: job.source)
         let target = Locale.Language(identifier: job.target)
-        model.message = "Preparing \(Self.name(job.source)) → \(Self.name(job.target)) translation…"
+        model.message = "Preparing \(TranslationCatalog.name(for: job.source)) → "
+            + "\(TranslationCatalog.name(for: job.target)) translation…"
         model.job = (lines, completion)
         if model.configuration?.source == source, model.configuration?.target == target {
             model.configuration?.invalidate()
@@ -203,26 +250,23 @@ final class LyricsTranslator {
         }
     }
 
-    private static func name(_ id: String) -> String {
-        TranslationCatalog.language(for: id)?.name ?? id
+    /// Front and visible: macOS presents the pack-download consent sheet on it.
+    private func showForConsent() {
+        window.alphaValue = 1
+        window.level = .floating
+        window.center()
+        window.makeKeyAndOrderFront(nil)
     }
 
-    private func show(interactive: Bool) {
-        if interactive {
-            window.alphaValue = 1
-            window.level = .floating
-            window.center()
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            // The task only runs while the view is in a displayed window, so
-            // park it on-screen but effectively invisible.
-            window.alphaValue = 0.01
-            if let screen = NSScreen.main {
-                window.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 2,
-                                              y: screen.visibleFrame.minY + 2))
-            }
-            window.orderFrontRegardless()
+    /// The task only runs while the view is in a displayed window, so park it
+    /// on-screen but effectively invisible.
+    private func parkInvisible() {
+        window.alphaValue = 0.01
+        if let screen = NSScreen.main {
+            window.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 2,
+                                          y: screen.visibleFrame.minY + 2))
         }
+        window.orderFrontRegardless()
     }
 }
 
@@ -234,10 +278,8 @@ enum TranslateCheck {
     private static var retained: LyricsTranslator?
 
     static func run(lrcPath: String) -> Never {
-        let app = NSApplication.shared
-        app.setActivationPolicy(.accessory)
         guard let text = try? String(contentsOfFile: lrcPath, encoding: .utf8) else {
-            FileHandle.standardError.write(Data("cannot read \(lrcPath)\n".utf8))
+            warn("cannot read \(lrcPath)")
             exit(1)
         }
         let lines = LrcParser.parse(text)
@@ -246,8 +288,7 @@ enum TranslateCheck {
         let batches = LanguageGate.plan(
             lines: texts, enabledSources: Set(TranslationCatalog.languages.map(\.id)),
             target: target, recognizer: AppleLanguageRecognizer.recognize)
-        FileHandle.standardError.write(
-            Data("lines: \(lines.count), batches: \(batches.count)\n".utf8))
+        warn("lines: \(lines.count), batches: \(batches.count)")
         let planned = Set(batches.flatMap(\.indices))
         for (index, line) in lines.enumerated() where !planned.contains(index) {
             print("[\(line.ms)ms] left alone: \(line.text)")
@@ -263,15 +304,22 @@ enum TranslateCheck {
             for batch in batches {
                 print("batch \(batch.source) → \(target): lines \(batch.indices)")
                 translator.translate(lines: batch.indices.map { texts[$0] },
-                                     from: batch.source, to: target) { translated in
-                    if let translated {
+                                     from: batch.source, to: target) { outcome in
+                    switch outcome {
+                    case .translated(let translated):
                         for (j, index) in batch.indices.enumerated() where j < translated.count {
                             let accepted = LanguageGate.isPlausibleOutput(translated[j], target: target)
                             print("[\(lines[index].ms)ms] \(batch.source): \(texts[index]) → "
                                   + translated[j] + (accepted ? "" : "  (rejected: not \(target))"))
                         }
-                    } else {
-                        print("batch \(batch.source) → \(target): unavailable (pack not installed or pair unsupported)")
+                    case .packNotDownloaded:
+                        print("batch \(batch.source) → \(target): pack not downloaded")
+                    case .unsupported:
+                        print("batch \(batch.source) → \(target): pair unsupported")
+                    case .failed:
+                        print("batch \(batch.source) → \(target): translation failed")
+                    case .skipped:
+                        print("batch \(batch.source) → \(target): skipped")
                     }
                     remaining -= 1
                     if remaining == 0 {
@@ -280,7 +328,7 @@ enum TranslateCheck {
                 }
             }
         }
-        app.run()
+        NSApplication.shared.run()
         fatalError("unreachable")
     }
 }

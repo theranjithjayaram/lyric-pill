@@ -63,15 +63,19 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
     (interpolates while playing, frozen while paused), `currentIndex()` (binary search, greatest
     start ≤ pos), `nextBoundaryMs()` (enables tickless scheduling).
   - `LrclibClient.swift` — fetch chain + cache (see §4); `LyricsOutcome` enum
-    `.found(String) / .none / .unavailable`; `cleanTitle()`; `cacheDigest()` (SHA-1 helper);
-    ephemeral URLSession (no CFNetwork disk cache), 15 s timeout, UA
-    `lyric-pill/<CFBundleShortVersionString> (https://github.com/theranjithjayaram/lyric-pill)`
-    (`dev` when unbundled).
-  - `ScriptDetector.swift` — `isMostlyDevanagari` (≥30% of alphabetic scalars in U+0900–097F),
-    `isMostlyLatin` (≥70% Latin incl. U+1E00–1EFF for Vietnamese), and `dominantScript()` →
-    `Script` enum (latin/greek/cyrillic/hebrew/arabic/devanagari/bengali/gurmukhi/tamil/thai/
-    hangul/kana/han/other) by block-range table; any kana letter ⇒ `.kana` (Japanese vs Chinese
-    decided by rule, not model).
+    `.found(String) / .none / .unavailable` (the fetch chain returns the same enum — no private
+    mirror); `cleanTitle()` (static regexes); `cacheKey(artist:title:album:durationS:)` +
+    `cachePath(for:)` (SHA-1 → `<hex>.lrc`) are the client's public cache layout, which
+    lyric-derived caches (translations) reuse with a suffix; transport = `defaultHttpGet(userAgent:)`
+    (ephemeral URLSession, 15 s timeout) — the UA string is composed by the app (`AppInfo.userAgent`
+    = `lyric-pill/<CFBundleShortVersionString> (https://github.com/theranjithjayaram/lyric-pill)`,
+    `dev` when unbundled), so LyricsCore knows nothing about the repo.
+  - `ScriptDetector.swift` — `dominantScript()` → `Script` enum (latin/greek/cyrillic/hebrew/
+    arabic/devanagari/bengali/gurmukhi/tamil/thai/hangul/kana/han/other) by block-range table
+    (Latin includes U+1E00–1EFF for Vietnamese); plurality wins; any kana letter ⇒ `.kana`
+    (Japanese vs Chinese decided by rule, not model). The hi-only-era threshold predicates
+    (`isMostlyDevanagari` ≥30 %, `isMostlyLatin` ≥70 %) were deleted in the 2026-10-24 simplify
+    pass — nothing in production used them once `LanguageGate` shipped.
   - `TranslationCatalog.swift` — the 20 languages Apple's Translation framework offers (macOS 15)
     with their script; `normalize()` maps Apple ids (`zh-Hans-CN`, `en_US`) to catalog ids.
   - `LanguageGate.swift` — `plan(lines:enabledSources:target:recognizer:)` → `[TranslationBatch]`
@@ -99,10 +103,14 @@ Spotify ──"com.spotify.client.PlaybackStateChanged" distributed notification
   - `StatusItemController.swift` — ♫ menu: status row (via `menuWillOpen`), Mode Off/On/Auto,
     Move Mode, Translate Lyrics toggle, Settings… (⌘,), About, Quit. Mode/translate write the
     shared `SettingsStore`; checkmarks re-read on every open.
-  - `LyricsTranslator.swift` — Apple Translation framework host (see §5): FIFO job queue (one in
-    flight; 60 s one-shot deadline per translate job, none for downloads — bug #14),
-    `translate(lines:from:to:)`, `downloadLanguagePack(from:to:)` (the only path that shows the
-    consent sheet), `availability`, `supportedLanguageIDs`; + `TranslateCheck` runner.
+  - `LyricsTranslator.swift` — Apple Translation framework host (see §5): FIFO job queue keyed by
+    job identity (`current: Job?`; 60 s one-shot deadline per translate job, none for downloads —
+    bug #14). **Owns the pack rule**: `translate(lines:from:to:skipIf:)` answers a
+    `TranslateOutcome` (`translated / packNotDownloaded / unsupported / failed / skipped`) and a
+    not-downloaded pack never reaches `prepareTranslation()`; `skipIf` lets the controller drop a
+    job whose track already changed before the model runs. `availability(from:to:) → PackStatus`
+    (the framework enum never leaves this file), `downloadLanguagePack(from:to:)` (the only path
+    that shows the consent sheet), `supportedLanguageIDs`; + `TranslateCheck` runner.
   - `Settings.swift` — `SettingsStore: ObservableObject` (`.shared`), `@Published` + UserDefaults:
     `mode` (auto), `center-x/y`, `translate-enabled` (true; migrated once from `translate-hindi`),
     `translate-sources` (`["hi"]`), `translate-target` (`"en"`), `pill-font-size` (20, 14…36),
@@ -188,9 +196,11 @@ Known data realities (explained to owner, accepted):
   app; zero network. Jobs are queued FIFO, one in flight (a second request used to be dropped).
 - Output validation: `LanguageGate.isPlausibleOutput` — the line must come back in the target's
   script, else the original line is kept (models emit mangled output for scripts they can't read).
-- Accepted lines are displayed prefixed **"⇄ "** (monochrome marker, owner-requested, display-only)
-  and the merged display lines are cached at key `…|tr-<target>-<sources>-v3` (v1/v2 entries are
-  orphaned, not deleted). Translation happens once per song per configuration; replays are instant.
+- Accepted lines are displayed prefixed **"⇄ "** (monochrome marker, owner-requested). The marker
+  is baked into the cached display lines at key `…|tr-<target>-<sources>-v3` (so changing the glyph
+  means a key bump; v1/v2 entries are orphaned, not deleted). The cache is consulted *before* the
+  language gate runs, so a replay never pays for planning. Translation happens once per song per
+  configuration; replays are instant.
 - The Hindi↔English language pack is installed on this Mac (user consented ~2026-08).
 - Apple's catalog has no Tamil/Punjabi/Bengali; romanized lyrics can't be translated by anything
   on-device. Told to the owner when they asked for translation options; README says so too.
@@ -295,8 +305,8 @@ Known data realities (explained to owner, accepted):
     first CI DMG would have been arm64-only while the README promised Intel.
 16. **Checksum before staple**: `stapler staple` rewrites the DMG, so a `.sha256` computed by
     `make-dmg.sh` fails for notarized releases. The workflow computes it as its last file-touching
-    step; `notarize.sh` also rewrites one it finds. The app is notarized+stapled before packing
-    so the copy users drag out opens offline.
+    step (one writer; `make-dmg.sh`'s sidecar serves CI artifacts and local dry runs). The app is
+    notarized+stapled before packing so the copy users drag out opens offline.
 
 ## 8. Publication / legal (advisor-reviewed 2026-10-12, verdict applied)
 
@@ -332,10 +342,12 @@ Known data realities (explained to owner, accepted):
   `scripts/make-dmg.sh APP OUT [--sign]`: `hdiutil` UDZO with an `Applications` symlink +
   `.sha256`. `scripts/notarize.sh` (CI only), `scripts/release-notes.sh` (CHANGELOG section),
   `scripts/make-icon.swift` (regenerates `app/AppIcon.icns` — committed, build doesn't need it).
-- `./install.sh`: build-app.sh → quit running app → remove legacy LaunchAgents (both labels) and
-  the pre-release `SpotifyLyricsOverlay` → `cp -R` (no re-sign) to `/Applications` or
-  `~/Applications` → `open`. `./uninstall.sh` reverses all of it (login item entry must be
-  removed in System Settings if it was enabled).
+- `./install.sh`: build-app.sh for this Mac's architecture only (`--archs "$(uname -m)"` —
+  a local install never needs the other slice) → quit running app → `cp -R` (no re-sign) to
+  `/Applications` or `~/Applications` → `open`. `./uninstall.sh` reverses it (login item entry
+  must be removed in System Settings if it was enabled). The pre-1.0 migration shims (LaunchAgent
+  labels, `SpotifyLyricsOverlay`, `translate-hindi` default) were removed on 2026-10-24: the only
+  machine that ever had them is the owner's, and it had already migrated.
 - First playback after a bundle-id change triggers the one-time
   "LyricPill would like to control Spotify" TCC prompt (`NSAppleEventsUsageDescription` set).
   `tccutil reset AppleEvents <bundle-id>` only works while the bundle resolves.
@@ -405,6 +417,13 @@ free, open source OK." Done autonomously (away-mode) on branch `worktree-public-
   `docs/release-process.md`, issue templates.
 - Judgement calls recorded in away-mode notes: SMAppService replaces the LaunchAgent (default
   off); no Sparkle; translation never pops the pack-download sheet on its own; MIT stays.
-- **Left for the owner** (needs their accounts/consent): merge the branch, make the repo public,
-  enable Actions write permission + private vulnerability reporting, push tag `v1.0.0`, optionally
-  add the signing secrets. Commands are in `docs/release-process.md` §5 and §1.
+- Shipped 2026-10-24: PR #1 squash-merged, repo public, `v1.0.0` released (ad-hoc DMG, verified
+  end-to-end from the Releases page). PR #2 = Translate-from switch alignment.
+- `/simplify` + `/verify` pass (2026-10-24, four review angles, applied): `LrclibClient` owns the
+  cache layout and returns `LyricsOutcome` throughout; translator owns the pack rule and answers
+  `TranslateOutcome` (one availability query per batch, stale jobs skipped before the model runs);
+  `AppController` state is one `LyricsState` enum + `engine.isPlaying` + `store.mode` (no
+  mirrors); dead `isMostly*` gate removed; debug flags parsed by one helper with real exit codes;
+  Settings no longer builds the translator eagerly; scripts derive the bundle id from Info.plist,
+  drop the pre-1.0 shims, and `install.sh` builds the native arch only. Runtime verification
+  recipe: `.claude/skills/verify/SKILL.md`.

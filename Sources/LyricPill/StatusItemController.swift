@@ -93,7 +93,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let raw = sender.representedObject as? String,
               let mode = OverlayMode(rawValue: raw) else { return }
         store.mode = mode
-        syncChecks()
     }
 
     @objc private func toggleMove(_ sender: NSMenuItem) {
@@ -103,7 +102,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleTranslate(_ sender: NSMenuItem) {
         store.translateEnabled.toggle()
-        syncChecks()
     }
 
     @objc private func openSettings(_ sender: NSMenuItem) {

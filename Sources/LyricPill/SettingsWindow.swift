@@ -7,12 +7,6 @@ enum SettingsTab: Hashable {
     case general, translation, about
 }
 
-/// One source→target pair's language-pack state, free of Translation-framework
-/// types so the view compiles for macOS 13.
-enum PackStatus {
-    case installed, downloadable, unsupported
-}
-
 /// What the Settings view needs from the controller, as closures: the view
 /// stays plain SwiftUI and the translator stays type-erased behind the
 /// macOS 15 availability check.

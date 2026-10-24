@@ -51,13 +51,6 @@ final class SettingsStore: ObservableObject {
     private let defaults = UserDefaults.standard
 
     private init() {
-        // One-time migration from the single-pair era: the old toggle becomes
-        // the general on/off switch; the pair itself moves to sources/target.
-        if defaults.object(forKey: "translate-enabled") == nil,
-           let legacy = defaults.object(forKey: "translate-hindi") as? Bool {
-            defaults.set(legacy, forKey: "translate-enabled")
-        }
-
         mode = OverlayMode(rawValue: defaults.string(forKey: "mode") ?? "") ?? .auto
         translateEnabled = defaults.object(forKey: "translate-enabled") as? Bool ?? true
         translateSources = defaults.stringArray(forKey: "translate-sources") ?? ["hi"]

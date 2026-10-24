@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Print the CHANGELOG.md section for a version, for the GitHub Release body.
 #
-#   scripts/release-notes.sh VERSION [CHANGELOG]
+#   scripts/release-notes.sh VERSION
 #
 # Matches "## [VERSION]…", "## VERSION…" or "## vVERSION…" and prints everything
 # up to the next "## " heading. Without CHANGELOG.md or a matching section it
 # prints the one-line fallback "LyricPill VERSION".
 set -euo pipefail
 
-VERSION="${1:?usage: release-notes.sh VERSION [CHANGELOG]}"
+VERSION="${1:?usage: release-notes.sh VERSION}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHANGELOG="${2:-$REPO/CHANGELOG.md}"
+CHANGELOG="$REPO/CHANGELOG.md"
 
 notes=""
 if [ -f "$CHANGELOG" ]; then

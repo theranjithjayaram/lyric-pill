@@ -1,7 +1,23 @@
 import AppKit
 import LyricsCore
 
-// Single-instance guard: the LaunchAgent and a manual `open` must not stack.
+/// Diagnostics go to stderr so stdout stays clean for the debug flags' output.
+func warn(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
+/// The argument after `flag`; nil when the flag is absent. A bare flag is a
+/// usage error, not a silent fall-through into a normal launch.
+func value(after flag: String) -> String? {
+    guard let index = CommandLine.arguments.firstIndex(of: flag) else { return nil }
+    guard index + 1 < CommandLine.arguments.count else {
+        warn("\(flag) needs a value")
+        exit(2)
+    }
+    return CommandLine.arguments[index + 1]
+}
+
+// Single-instance guard: the login item and a manual `open` must not stack.
 if let bundleId = Bundle.main.bundleIdentifier {
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
         .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
@@ -11,9 +27,8 @@ if let bundleId = Bundle.main.bundleIdentifier {
 }
 
 // Debug: print the engine's selected line at fixed positions for an LRC file.
-if let flag = CommandLine.arguments.firstIndex(of: "--engine-check"),
-   flag + 1 < CommandLine.arguments.count {
-    let text = (try? String(contentsOfFile: CommandLine.arguments[flag + 1], encoding: .utf8)) ?? ""
+if let path = value(after: "--engine-check") {
+    let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     let lines = LrcParser.parse(text)
     print("parsed \(lines.count) lines; first ms: \(lines.first?.ms ?? -1), last ms: \(lines.last?.ms ?? -1)")
     let engine = TimingEngine()
@@ -25,30 +40,26 @@ if let flag = CommandLine.arguments.firstIndex(of: "--engine-check"),
     exit(0)
 }
 
-if let flag = CommandLine.arguments.firstIndex(of: "--translate-check"),
-   flag + 1 < CommandLine.arguments.count {
+let app = NSApplication.shared
+// .accessory keeps us out of the Dock even when run unbundled (`swift run`);
+// the bundled app also sets LSUIElement.
+app.setActivationPolicy(.accessory)
+
+if let path = value(after: "--translate-check") {
     if #available(macOS 15.0, *) {
-        TranslateCheck.run(lrcPath: CommandLine.arguments[flag + 1])
+        TranslateCheck.run(lrcPath: path)
     }
-    FileHandle.standardError.write(Data("--translate-check requires macOS 15+\n".utf8))
+    warn("--translate-check requires macOS 15+")
     exit(1)
 }
 
-var simulatePath: String?
-if let flag = CommandLine.arguments.firstIndex(of: "--simulate"),
-   flag + 1 < CommandLine.arguments.count {
-    simulatePath = CommandLine.arguments[flag + 1]
-}
+let simulatePath = value(after: "--simulate")
 // Debug: open the Settings window right at start (verification without clicking).
 let showSettings = CommandLine.arguments.contains("--settings")
 
 // Debug: render the Settings window (Translation tab, fake pack statuses) to a
 // PNG and exit — layout checks on a Mac without Screen Recording permission.
-if let flag = CommandLine.arguments.firstIndex(of: "--snapshot-settings"),
-   flag + 1 < CommandLine.arguments.count {
-    let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
-    let output = CommandLine.arguments[flag + 1]
+if let output = value(after: "--snapshot-settings") {
     var services = SettingsServices(resetPillPosition: {}, translation: nil)
     services.translation = SettingsServices.Translation(
         supportedLanguageIDs: { Set(TranslationCatalog.languages.map(\.id)) },
@@ -68,11 +79,6 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot-settings"),
     }
     app.run()
 }
-
-let app = NSApplication.shared
-// .accessory keeps us out of the Dock even when run unbundled (`swift run`);
-// the bundled app also sets LSUIElement.
-app.setActivationPolicy(.accessory)
 
 let controller = AppController(simulateLrcPath: simulatePath, showSettingsAtStart: showSettings)
 controller.start()

@@ -9,37 +9,6 @@ public enum Script: String, CaseIterable, Equatable {
 }
 
 public enum ScriptDetector {
-    /// True when a meaningful share (≥30%) of the text's letters are
-    /// Devanagari — i.e. the lyrics are written in Hindi script, as opposed to
-    /// romanized Hindi or a community-uploaded English translation. The
-    /// threshold tolerates mixed lines (English loan words inside Hindi text).
-    public static func isMostlyDevanagari(_ text: String) -> Bool {
-        var devanagari = 0
-        var letters = 0
-        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
-            letters += 1
-            if script(of: scalar) == .devanagari {
-                devanagari += 1
-            }
-        }
-        return letters > 0 && devanagari * 10 >= letters * 3
-    }
-
-    /// True when the text's letters are predominantly Latin — used to verify
-    /// a translation actually came back as English rather than model garbage
-    /// (the hi→en model emits mangled output for scripts it can't read).
-    public static func isMostlyLatin(_ text: String) -> Bool {
-        var latin = 0
-        var letters = 0
-        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
-            letters += 1
-            if script(of: scalar) == .latin {
-                latin += 1
-            }
-        }
-        return letters > 0 && latin * 10 >= letters * 7
-    }
-
     /// Script with the most alphabetic scalars; nil when the text has no letters.
     /// Any Hiragana/Katakana letter makes the result .kana (Chinese text never
     /// contains kana; Japanese text is usually kanji-heavy) — so Han vs

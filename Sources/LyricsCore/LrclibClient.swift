@@ -1,12 +1,12 @@
 import CryptoKit
 import Foundation
 
-/// Distinguishes "no lyrics exist" from "couldn't ask" — callers retry the
-/// latter but must never retry-spam the former.
+/// Distinguishes "no lyrics exist" from "couldn't ask": a miss is cached (with
+/// a TTL), a failure never is, so the next fetch simply asks again.
 public enum LyricsOutcome: Equatable {
     case found(String)  // synced LRC
     case none           // definitive: lrclib has no synced lyrics for this track
-    case unavailable    // transport/parse failure — worth retrying later
+    case unavailable    // transport/parse failure — never cached
 }
 
 /// Fetches time-synced lyrics from lrclib.net with a disk cache.
@@ -28,25 +28,16 @@ public final class LrclibClient {
     private let cacheDir: URL
     private let httpGet: HttpGet
 
-    private enum FetchResult {
-        case found(String)
-        case miss   // definitive — cacheable
-        case abort  // transport/parse error — not cacheable
-    }
-
-    /// `appVersion` goes into the User-Agent lrclib asks clients to identify
-    /// with; `httpGet` nil means real HTTPS (tests inject a fake).
-    public init(cacheDir: URL, appVersion: String = "dev", httpGet: HttpGet? = nil) {
+    /// `httpGet` is `defaultHttpGet(userAgent:)` in the app; tests inject a fake.
+    public init(cacheDir: URL, httpGet: @escaping HttpGet) {
         self.cacheDir = cacheDir
-        let userAgent = "lyric-pill/\(appVersion) (https://github.com/theranjithjayaram/lyric-pill)"
-        self.httpGet = httpGet ?? { try Self.defaultHttpGet($0, userAgent: userAgent) }
+        self.httpGet = httpGet
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
     }
 
     /// Blocking — call from a background queue.
     public func getSynced(artist: String, title: String, album: String, durationS: Int) -> LyricsOutcome {
-        let key = [artist, title, album, String(durationS)].joined(separator: "|")
-        let path = cachePath(for: key)
+        let path = cachePath(for: Self.cacheKey(artist: artist, title: title, album: album, durationS: durationS))
         if let cached = try? String(contentsOf: path, encoding: .utf8) {
             if !cached.isEmpty {
                 return .found(cached)
@@ -58,28 +49,46 @@ public final class LrclibClient {
             }
         }
 
-        switch fetch(artist: artist, title: title, album: album, durationS: durationS) {
+        let outcome = fetch(artist: artist, title: title, album: album, durationS: durationS)
+        switch outcome {
         case .found(let lrc):
             // .atomic = temp file + rename, so a concurrent reader never sees a torn file.
             try? Data(lrc.utf8).write(to: path, options: .atomic)
-            return .found(lrc)
-        case .miss:
+        case .none:
             try? Data().write(to: path, options: .atomic)
-            return .none
-        case .abort:
-            return .unavailable
+        case .unavailable:
+            break
         }
+        return outcome
     }
+
+    // MARK: - Cache layout (shared with lyric-derived caches, e.g. translations)
+
+    /// The identity of a track as lrclib sees it.
+    public static func cacheKey(artist: String, title: String, album: String, durationS: Int) -> String {
+        [artist, title, album, String(durationS)].joined(separator: "|")
+    }
+
+    /// Where `key` lives on disk; derived caches append their own suffix to
+    /// a track's key and get a sibling file.
+    public func cachePath(for key: String) -> URL {
+        let digest = Insecure.SHA1.hash(data: Data(key.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return cacheDir.appendingPathComponent(digest + ".lrc")
+    }
+
+    // MARK: - Title cleaning
+
+    private static let annotation = try! NSRegularExpression(
+        pattern: #"(?i)\b(from|feat\.?|ft\.?|with|remaster(?:ed)?)\b"#)
+    private static let trailingGroup = try! NSRegularExpression(pattern: #"\s*[(\[]([^()\[\]]*)[)\]]\s*$"#)
+    private static let dashSuffix = try! NSRegularExpression(pattern: #"(?i)\s+-\s+from\b.*$"#)
 
     /// Strip trailing annotation suffixes — `(From "Movie")`, `[feat. X]`,
     /// `... - From "Movie"` — that Spotify includes but lrclib usually doesn't.
     /// Content-bearing parentheticals (e.g. "(Live)") are left alone: their
     /// versions genuinely differ, and the duration gate handles the rest.
     public static func cleanTitle(_ title: String) -> String {
-        let annotation = try! NSRegularExpression(
-            pattern: #"(?i)\b(from|feat\.?|ft\.?|with|remaster(?:ed)?)\b"#)
-        let trailingGroup = try! NSRegularExpression(pattern: #"\s*[(\[]([^()\[\]]*)[)\]]\s*$"#)
-
         var result = title.trimmingCharacters(in: .whitespaces)
         while true {
             let range = NSRange(result.startIndex..., in: result)
@@ -95,7 +104,6 @@ public final class LrclibClient {
             result = result.trimmingCharacters(in: .whitespaces)
         }
 
-        let dashSuffix = try! NSRegularExpression(pattern: #"(?i)\s+-\s+from\b.*$"#)
         let range = NSRange(result.startIndex..., in: result)
         if let match = dashSuffix.firstMatch(in: result, range: range),
            let r = Range(match.range, in: result) {
@@ -105,29 +113,14 @@ public final class LrclibClient {
         return result.isEmpty ? title : result
     }
 
-    /// Stable digest for cache filenames; public so other lyric-derived caches
-    /// (e.g. translations) key the same way.
-    public static func cacheDigest(_ key: String) -> String {
-        Insecure.SHA1.hash(data: Data(key.utf8))
-            .map { String(format: "%02x", $0) }.joined()
-    }
+    // MARK: - Fetch chain (first hit wins; a failure stops the chain)
 
-    private func cachePath(for key: String) -> URL {
-        cacheDir.appendingPathComponent(Self.cacheDigest(key) + ".lrc")
-    }
+    private func fetch(artist: String, title: String, album: String, durationS: Int) -> LyricsOutcome {
+        let exact = fetchGet(artist: artist, title: title, album: album, durationS: durationS)
+        guard exact == .none else { return exact }
 
-    private func fetch(artist: String, title: String, album: String, durationS: Int) -> FetchResult {
-        switch fetchGet(artist: artist, title: title, album: album, durationS: durationS) {
-        case .found(let lrc): return .found(lrc)
-        case .abort: return .abort
-        case .miss: break
-        }
-
-        switch fetchSearch(track: title, artist: artist, durationS: durationS) {
-        case .found(let lrc): return .found(lrc)
-        case .abort: return .abort
-        case .miss: break
-        }
+        let byArtist = fetchSearch(track: title, artist: artist, durationS: durationS)
+        guard byArtist == .none else { return byArtist }
 
         // Last resort: annotation-free title with no artist filter — covers
         // "(From ...)" movie suffixes and multi-artist strings lrclib stores
@@ -137,11 +130,11 @@ public final class LrclibClient {
             return fetchSearch(track: cleaned, artist: nil, durationS: durationS,
                                maxDurationDelta: Self.maxDurationDeltaS)
         }
-        return .miss
+        return .none
     }
 
     /// Exact lookup: GET /api/get?artist_name=&track_name=&album_name=&duration=
-    private func fetchGet(artist: String, title: String, album: String, durationS: Int) -> FetchResult {
+    private func fetchGet(artist: String, title: String, album: String, durationS: Int) -> LyricsOutcome {
         var comps = URLComponents(string: Self.base + "/api/get")!
         comps.queryItems = [
             URLQueryItem(name: "artist_name", value: artist),
@@ -152,22 +145,22 @@ public final class LrclibClient {
         do {
             let (status, body) = try httpGet(comps.url!)
             // Only 404 means "lrclib has no such track". 5xx et al. are outages
-            // and must surface as .abort so they are never cached as misses.
-            if status == 404 { return .miss }
-            guard status == 200, !body.isEmpty else { return .abort }
+            // and must surface as .unavailable so they are never cached as misses.
+            if status == 404 { return .none }
+            guard status == 200, !body.isEmpty else { return .unavailable }
             guard let obj = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any]
-            else { return .abort }
+            else { return .unavailable }
             if let lrc = obj["syncedLyrics"] as? String, !lrc.isEmpty { return .found(lrc) }
-            return .miss
+            return .none
         } catch {
-            return .abort
+            return .unavailable
         }
     }
 
     /// Fallback: GET /api/search, closest duration wins (optionally gated).
     private func fetchSearch(
         track: String, artist: String?, durationS: Int, maxDurationDelta: Int? = nil
-    ) -> FetchResult {
+    ) -> LyricsOutcome {
         var comps = URLComponents(string: Self.base + "/api/search")!
         var query = [URLQueryItem(name: "track_name", value: track)]
         if let artist, !artist.isEmpty {
@@ -176,10 +169,10 @@ public final class LrclibClient {
         comps.queryItems = query
         do {
             let (status, body) = try httpGet(comps.url!)
-            if status == 404 { return .miss }
-            guard status == 200, !body.isEmpty else { return .abort }
+            if status == 404 { return .none }
+            guard status == 200, !body.isEmpty else { return .unavailable }
             guard let items = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [[String: Any]]
-            else { return .abort }
+            else { return .unavailable }
             var candidates = items.compactMap { item -> (lrc: String, duration: Int)? in
                 guard let lrc = item["syncedLyrics"] as? String, !lrc.isEmpty else { return nil }
                 return (lrc, (item["duration"] as? NSNumber)?.intValue ?? 0)
@@ -189,33 +182,38 @@ public final class LrclibClient {
             }
             guard let best = candidates.min(by: {
                 abs($0.duration - durationS) < abs($1.duration - durationS)
-            }) else { return .miss }
+            }) else { return .none }
             return .found(best.lrc)
         } catch {
-            return .abort
+            return .unavailable
         }
     }
+
+    // MARK: - Transport
 
     // Ephemeral: no CFNetwork disk cache / cookie store — the lyric cache
     // above is the only persistence this client needs.
     private static let session = URLSession(configuration: .ephemeral)
 
-    /// Synchronous URLSession wrapper — only ever called on a background queue.
-    public static func defaultHttpGet(_ url: URL, userAgent: String) throws -> (status: Int, body: String) {
-        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: Result<(status: Int, body: String), Error> = .failure(URLError(.unknown))
-        session.dataTask(with: request) { data, response, error in
-            if let error {
-                result = .failure(error)
-            } else if let http = response as? HTTPURLResponse {
-                let body = String(data: data ?? Data(), encoding: .utf8) ?? ""
-                result = .success((http.statusCode, body))
-            }
-            semaphore.signal()
-        }.resume()
-        semaphore.wait()
-        return try result.get()
+    /// Real HTTPS, identifying itself as lrclib asks clients to. Synchronous —
+    /// only ever called on a background queue.
+    public static func defaultHttpGet(userAgent: String) -> HttpGet {
+        { url in
+            var request = URLRequest(url: url, timeoutInterval: requestTimeout)
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            let semaphore = DispatchSemaphore(value: 0)
+            var result: Result<(status: Int, body: String), Error> = .failure(URLError(.unknown))
+            session.dataTask(with: request) { data, response, error in
+                if let error {
+                    result = .failure(error)
+                } else if let http = response as? HTTPURLResponse {
+                    let body = String(data: data ?? Data(), encoding: .utf8) ?? ""
+                    result = .success((http.statusCode, body))
+                }
+                semaphore.signal()
+            }.resume()
+            semaphore.wait()
+            return try result.get()
+        }
     }
 }

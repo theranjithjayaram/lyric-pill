@@ -14,8 +14,11 @@ public struct LrcLine: Equatable {
 /// Parse LRC synced-lyrics text into `LrcLine`s sorted by start time.
 public enum LrcParser {
     // Matches one timestamp like [mm:ss.xx], [mm:ss.xxx] or [mm:ss].
+    // [0-9], not \d: ICU's \d also matches other scripts' digits (e.g.
+    // Arabic-Indic), which Int() rejects — a community upload with such a
+    // "timestamp" would otherwise crash the parse below.
     private static let timestamp = try! NSRegularExpression(
-        pattern: #"\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]"#)
+        pattern: #"\[([0-9]{1,2}):([0-9]{2})(?:\.([0-9]{1,3}))?\]"#)
 
     /// - Supports multiple timestamps on one line (line duplicated per timestamp).
     /// - Fractions of 1, 2, or 3 digits are interpreted as tenths/hundredths/ms.
