@@ -337,6 +337,18 @@ Known data realities (explained to owner, accepted):
     xcbuild (full Xcode) and fails on Command Line Tools; one `swift build --triple
     <arch>-apple-macosx` per arch + `lipo -create` works everywhere. Found by the review: the
     first CI DMG would have been arm64-only while the README promised Intel.
+17. **Translation tab crashed the app** (reported by the owner after the simplify pass): the pass
+    made the controller build its `LyricsTranslator` lazily *inside* the Settings service closures
+    (`self?.translator`), and SwiftUI's `.task` calls a plain `async` closure on the cooperative
+    pool — so the translator's hidden host `NSWindow` was created off the main thread:
+    `NSInternalInconsistencyException: NSWindow should only be instantiated on the main thread!`
+    Fix: the `SettingsServices.Translation` closure types are `@MainActor`, so creation is forced
+    onto main by the compiler. Lessons: (a) any lazily created AppKit object reachable from a
+    SwiftUI `.task` needs a main-actor boundary; (b) `--snapshot-settings` uses *fake* services, so
+    it never exercised this path — reproduce with `--settings translation` (real services), which
+    now exists for exactly that; (c) a crash on this Mac is in
+    `~/Library/Logs/DiagnosticReports/LyricPill-*.ips` — the "crashed thread" queue name
+    (`com.apple.root.user-initiated-qos.cooperative`) named the culprit before any code was read.
 16. **Checksum before staple**: `stapler staple` rewrites the DMG, so a `.sha256` computed by
     `make-dmg.sh` fails for notarized releases. The workflow computes it as its last file-touching
     step (one writer; `make-dmg.sh`'s sidecar serves CI artifacts and local dry runs). The app is

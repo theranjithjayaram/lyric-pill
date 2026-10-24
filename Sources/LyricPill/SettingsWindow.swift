@@ -11,10 +11,13 @@ enum SettingsTab: Hashable {
 /// stays plain SwiftUI and the translator stays type-erased behind the
 /// macOS 15 availability check.
 struct SettingsServices {
+    // @MainActor: the controller resolves its translator (an NSWindow host)
+    // inside these, and SwiftUI's `.task` would otherwise call them on the
+    // cooperative pool — bug #17 was exactly that NSWindow off the main thread.
     struct Translation {
-        var supportedLanguageIDs: () async -> Set<String>
-        var packStatus: (_ source: String, _ target: String) async -> PackStatus
-        var downloadPack: (_ source: String, _ target: String, _ completion: @escaping (Bool) -> Void) -> Void
+        var supportedLanguageIDs: @MainActor () async -> Set<String>
+        var packStatus: @MainActor (_ source: String, _ target: String) async -> PackStatus
+        var downloadPack: @MainActor (_ source: String, _ target: String, _ completion: @escaping (Bool) -> Void) -> Void
     }
 
     var resetPillPosition: () -> Void

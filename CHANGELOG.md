@@ -21,6 +21,8 @@ versions follow [Semantic Versioning](https://semver.org/).
   but no longer cached that way — downloading the pack later now takes effect on the next play.
 
 ### Fixed
+- Opening Settings → Translation crashed the app (the translator's host window was created off the
+  main thread). Not in 1.0.0; introduced and fixed between releases.
 - Settings → Translation: the *Translate from* switches now line up in one column.
 - `--simulate` with an unreadable file exits 1 (was 0); a debug flag given without its value is
   reported instead of silently ignored.

@@ -52,9 +52,18 @@ if let output = value(after: "--snapshot-pill") {
     DebugCommands.snapshotPill(to: output)
 }
 
-// `--simulate f.lrc` drives the overlay with no Spotify; `--settings` opens
-// the Settings window at start (verification without clicking).
+// `--simulate f.lrc` drives the overlay with no Spotify; `--settings [tab]`
+// opens the Settings window at start (verification without clicking).
+var settingsAtStart: SettingsTab?
+if let index = CommandLine.arguments.firstIndex(of: "--settings") {
+    let next = index + 1 < CommandLine.arguments.count ? CommandLine.arguments[index + 1] : ""
+    settingsAtStart = switch next {
+    case "translation": .translation
+    case "about": .about
+    default: .general
+    }
+}
 let controller = AppController(simulateLrcPath: value(after: "--simulate"),
-                               showSettingsAtStart: CommandLine.arguments.contains("--settings"))
+                               showSettingsAtStart: settingsAtStart)
 controller.start()
 app.run()
