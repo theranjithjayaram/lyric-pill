@@ -45,7 +45,7 @@ final class AppController {
     private var settingsWindow: SettingsWindowController?  // built on first open
 
     private let simulateLrcPath: String?
-    private let showSettingsAtStart: Bool
+    private let showSettingsAtStart: SettingsTab?  // debug: `--settings [tab]`
 
     private static let resyncInterval: TimeInterval = 10
 
@@ -53,7 +53,7 @@ final class AppController {
     private var translatorStorage: Any?
     private var currentFetchKey = ""
 
-    init(simulateLrcPath: String?, showSettingsAtStart: Bool) {
+    init(simulateLrcPath: String?, showSettingsAtStart: SettingsTab?) {
         self.simulateLrcPath = simulateLrcPath
         self.showSettingsAtStart = showSettingsAtStart
         let overlay = OverlayWindow(savedCenter: store.savedCenter)
@@ -93,8 +93,8 @@ final class AppController {
 
         // Both opens wait for app.run(), so the window appears the way a menu
         // click would open it rather than before the app has launched.
-        if showSettingsAtStart {
-            DispatchQueue.main.async { [weak self] in self?.showSettings(tab: .general) }
+        if let tab = showSettingsAtStart {
+            DispatchQueue.main.async { [weak self] in self?.showSettings(tab: tab) }
         } else if !store.firstRunDone {
             // One-shot welcome: let the status item land, then open Settings.
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in

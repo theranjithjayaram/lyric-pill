@@ -28,8 +28,10 @@ are invisible to CGWindowList on macOS 26. Restore afterwards with `open /Applic
   at the saved centre; its **width changes per lyric line** — sample at 3 timestamps. The
   Settings window is `layer=0 520×512`, centred on the main screen.
 - `--simulate examples/sample.lrc` drives the pill with no Spotify (lines every 3 s).
-- `--settings` opens the Settings window at start; `--snapshot-settings out.png` renders the
-  Translation tab (fake pack statuses) to a PNG — view it with the Read tool.
+- `--settings [general|translation|about]` opens the Settings window on that tab with the REAL
+  services — always drive `--settings translation` after touching the translator or the Settings
+  services (bug #17 was a crash only this path reaches). `--snapshot-settings out.png [tab]`
+  renders a tab with *fake* pack statuses to a PNG — layout only, never a substitute for the above.
 - `--translate-check examples/mixed-script-sample.lrc` runs the real on-device translation
   (hi→en pack is installed on this Mac; Gurmukhi and romanized lines must print "left alone").
 - `--engine-check file.lrc` prints parse + selection at fixed positions (CRLF files included).
