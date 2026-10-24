@@ -6,3 +6,4 @@ build/
 *.dmg
 *.dmg.sha256
 *.iconset/
+.taste-skill/

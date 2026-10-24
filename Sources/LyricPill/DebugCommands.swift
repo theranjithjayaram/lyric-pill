@@ -92,10 +92,28 @@ enum DebugCommands {
         }
     }
 
-    /// `--snapshot-settings out.png`: render the Settings window (Translation
-    /// tab, fake pack statuses) to a PNG and exit — layout checks on a Mac
-    /// without Screen Recording permission.
-    static func snapshotSettings(to output: String) -> Never {
+    /// `--snapshot-pill out.png`: render the pill with a line to a PNG and exit.
+    static func snapshotPill(to output: String) -> Never {
+        let overlay = OverlayWindow(savedCenter: nil)
+        overlay.setText("one line at a time, until the end")
+        overlay.show()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            overlay.snapshot(to: output)
+            exit(0)
+        }
+        NSApplication.shared.run()
+        fatalError("unreachable")
+    }
+
+    /// `--snapshot-settings out.png [general|translation|about]`: render the
+    /// Settings window (fake pack statuses) to a PNG and exit — layout checks
+    /// on a Mac without Screen Recording permission.
+    static func snapshotSettings(to output: String, tab tabName: String?) -> Never {
+        let tab: SettingsTab = switch tabName {
+        case "general": .general
+        case "about": .about
+        default: .translation
+        }
         var services = SettingsServices(resetPillPosition: {}, translation: nil)
         services.translation = SettingsServices.Translation(
             supportedLanguageIDs: { Set(TranslationCatalog.languages.map(\.id)) },
@@ -108,7 +126,7 @@ enum DebugCommands {
             },
             downloadPack: { _, _, completion in completion(false) })
         let settings = SettingsWindowController(services: services)
-        settings.show(tab: .translation)
+        settings.show(tab: tab)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {  // let .task load statuses
             settings.snapshot(to: output)
             exit(0)

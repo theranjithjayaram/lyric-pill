@@ -43,7 +43,13 @@ if let path = value(after: "--translate-check") {
     exit(1)
 }
 if let output = value(after: "--snapshot-settings") {
-    DebugCommands.snapshotSettings(to: output)
+    // An optional tab name may follow the path.
+    let index = CommandLine.arguments.firstIndex(of: output)! + 1
+    let tab = index < CommandLine.arguments.count ? CommandLine.arguments[index] : nil
+    DebugCommands.snapshotSettings(to: output, tab: tab)
+}
+if let output = value(after: "--snapshot-pill") {
+    DebugCommands.snapshotPill(to: output)
 }
 
 // `--simulate f.lrc` drives the overlay with no Spotify; `--settings` opens

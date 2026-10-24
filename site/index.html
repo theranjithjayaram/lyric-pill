@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LyricPill — one Spotify lyric line, always on top</title>
+  <meta name="description" content="A free macOS menu-bar app that floats the current Spotify lyric line over whatever you’re doing, in time, and can translate it on your Mac.">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="LyricPill">
+  <meta property="og:description" content="One Spotify lyric line, always on top. Free, open source, 460 KB.">
+  <meta property="og:image" content="https://theranjithjayaram.github.io/lyric-pill/assets/icon-512.png">
+  <link rel="icon" href="assets/icon-512.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-512.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="note" viewBox="0 0 16 16"><path d="M10 1.5v9.1a2.6 2.6 0 1 1-1.5-2.4V1.5zM1.5 3h5v1.5h-5zm0 3.5h5V8h-5zm0 3.5h4v1.5h-4z"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="nav wrap">
+  <a class="wordmark" href="#top">LyricPill</a>
+  <nav aria-label="Page">
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="#privacy">Privacy</a>
+    <a href="https://github.com/theranjithjayaram/lyric-pill">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy wrap">
+      <h1 id="hero-title" class="display lines"><span class="line"><span data-line style="--i:0">One lyric line,</span></span><span class="line"><span data-line style="--i:1">always on top.</span></span></h1>
+      <p class="lead" data-rise style="--i:2">A free macOS menu-bar app that floats the current Spotify lyric over whatever you’re doing, in time, and can translate it on your Mac.</p>
+      <p class="actions" data-rise style="--i:3">
+        <a class="button" id="download" href="https://github.com/theranjithjayaram/lyric-pill/releases/latest">Download for Mac</a>
+      </p>
+      <p class="small muted meta" id="download-meta" data-rise style="--i:4">Version 1.0.0 · 1 MB · macOS 13 or later · Apple silicon and Intel</p>
+    </div>
+
+    <div class="stage shutter" data-reveal>
+      <div class="screen" data-ui aria-label="The LyricPill pill over a Mac desktop, keeping time with a song">
+        <div class="menubar">
+          <span class="menubar-left"><span class="apple"></span><strong>Finder</strong><span>File</span><span>Edit</span><span>View</span><span>Go</span></span>
+          <span class="menubar-right"><svg class="icon"><use href="#note"/></svg><span class="menubar-clock">Fri 24 Oct&nbsp; 10:04</span></span>
+        </div>
+        <div class="desktop">
+          <button class="pill" id="pill" type="button" aria-live="polite" aria-label="Lyric line; press to pause the demo"><span id="pill-text">Morning light across the floor</span></button>
+          <p class="timecode"><span id="timecode">00:00.00</span><span id="timenote"></span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="showcase" aria-labelledby="showcase-title">
+    <h2 id="showcase-title" class="head wrap" data-reveal>Everything it shows you</h2>
+    <div class="carousel" id="carousel" tabindex="0" aria-label="Interface panels, scroll sideways">
+
+      <figure class="panel is-lit" data-name="The menu" data-text="Click the note in the menu bar for the status row, the three modes, Move Mode, translation and Settings.">
+        <div class="ui menu" data-ui>
+          <div class="menu-status">Showing synced lyrics</div>
+          <div class="menu-sep"></div>
+          <div class="menu-item"><svg class="icon check"><use href="#check"/></svg>Mode: Auto</div>
+          <div class="menu-item"><span class="check"></span>Mode: On</div>
+          <div class="menu-item"><span class="check"></span>Mode: Off</div>
+          <div class="menu-sep"></div>
+          <div class="menu-item"><span class="check"></span>Move Mode</div>
+          <div class="menu-item"><svg class="icon check"><use href="#check"/></svg>Translate Lyrics</div>
+          <div class="menu-sep"></div>
+          <div class="menu-item is-hover"><span class="check"></span>Settings…<span class="shortcut">⌘,</span></div>
+          <div class="menu-item"><span class="check"></span>About LyricPill</div>
+          <div class="menu-sep"></div>
+          <div class="menu-item"><span class="check"></span>Quit LyricPill<span class="shortcut">⌘Q</span></div>
+        </div>
+      </figure>
+
+      <figure class="panel" data-name="General" data-text="Overlay mode, launch at login, Spotify access, the pill’s size and opacity.">
+        <img class="ui shot" src="assets/settings-general.png" width="520" height="460" alt="The General tab: overlay mode Auto, Launch at login, Spotify access Allowed, font size and opacity sliders, Reset Position." loading="lazy">
+      </figure>
+
+      <figure class="panel" data-name="Translation" data-text="Twenty languages. Each pack downloads once, from here, and runs on the Mac.">
+        <img class="ui shot" src="assets/settings-translation.png" width="520" height="460" alt="The Translation tab: Translate lyrics on, Translate into English, and a list of languages with Download buttons; Hindi is on and installed." loading="lazy">
+      </figure>
+
+      <figure class="panel" data-name="Move Mode" data-text="The pill grows a border and goes where you drag it. The spot is remembered.">
+        <div class="ui desk" data-ui>
+          <span class="pill is-move"><svg class="icon"><use href="#note"/></svg> drag me <svg class="icon"><use href="#note"/></svg></span>
+        </div>
+      </figure>
+
+      <figure class="panel" data-name="The status row" data-text="It says what is happening: showing, no synced lyrics, server unreachable, a pack missing.">
+        <div class="ui menu statuses" data-ui>
+          <div class="menu-status">Fetching lyrics…</div>
+          <div class="menu-status">No synced lyrics for this track</div>
+          <div class="menu-status">Lyrics server unreachable</div>
+          <div class="menu-status">Showing synced lyrics — Hindi pack not downloaded (Settings → Translation)</div>
+          <div class="menu-status">Paused</div>
+        </div>
+      </figure>
+
+      <figure class="panel" data-name="About" data-text="The version, a check for updates on request, and where the source lives.">
+        <img class="ui shot" src="assets/settings-about.png" width="520" height="460" alt="The About tab: the app icon, LyricPill, the version, Check for Updates, and links to GitHub, issues, privacy and the licence." loading="lazy">
+      </figure>
+
+    </div>
+    <div class="carousel-text wrap">
+      <p class="carousel-name" id="carousel-name">The menu</p>
+      <p class="carousel-line" id="carousel-line">Click the note in the menu bar for the status row, the three modes, Move Mode, translation and Settings.</p>
+    </div>
+  </section>
+
+  <section class="bands" id="features" aria-labelledby="features-title">
+    <h2 id="features-title" class="sr-only">Four switches</h2>
+
+    <div class="band is-on" data-reveal>
+      <div class="band-inner wrap">
+        <div class="band-text">
+          <p class="band-sentence">Show the line only while a song plays.</p>
+          <p class="band-why">Paused: hidden, no timer armed. Playing: one timer, set for the next line.</p>
+        </div>
+        <button class="switch big is-on" data-ui type="button" role="switch" aria-checked="true" aria-label="Show the line only while a song plays"><span></span></button>
+      </div>
+    </div>
+
+    <div class="band is-on" data-reveal>
+      <div class="band-inner wrap">
+        <div class="band-text">
+          <p class="band-sentence">Translate the line into English on this Mac.</p>
+          <p class="band-why">Twenty languages, packs downloaded once from Settings, nothing sent anywhere.</p>
+        </div>
+        <button class="switch big is-on" data-ui type="button" role="switch" aria-checked="true" aria-label="Translate the line into English on this Mac"><span></span></button>
+      </div>
+    </div>
+
+    <div class="band" data-reveal>
+      <div class="band-inner wrap">
+        <div class="band-text">
+          <p class="band-sentence">Start LyricPill when you log in.</p>
+          <p class="band-why">A standard login item, visible in System Settings.</p>
+        </div>
+        <button class="switch big" data-ui type="button" role="switch" aria-checked="false" aria-label="Start LyricPill when you log in"><span></span></button>
+      </div>
+    </div>
+
+    <div class="band" data-reveal>
+      <div class="band-inner wrap">
+        <div class="band-text">
+          <p class="band-sentence">Drag the pill anywhere you like.</p>
+          <p class="band-why">Move Mode. The position is kept, per screen.</p>
+        </div>
+        <button class="switch big" data-ui type="button" role="switch" aria-checked="false" aria-label="Drag the pill anywhere you like"><span></span></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" id="weight" aria-labelledby="stats-title">
+    <div class="stats-head wrap">
+      <h2 id="stats-title" class="head" data-reveal>What it costs your Mac</h2>
+      <p class="figure nums" data-reveal>0 ms</p>
+      <p class="claim" data-reveal>CPU while a song is paused</p>
+    </div>
+    <p class="stats-statement wrap" data-reveal>The app is 460 KB on disk and sits at 39 MB. It never polls: Spotify’s own notification wakes it, one timer is set for the next line, and nothing runs while a song is paused.</p>
+    <figure class="chart" data-ui>
+      <figcaption class="small chart-caption wrap">CPU time per five seconds over one minute, measured on the released build: paused, then playing, then paused.</figcaption>
+      <ol class="bars nums" aria-label="CPU time per five-second window, in milliseconds">
+        <li style="--v:0"   data-label="paused"><span class="bar"></span><span class="bar-value">0</span></li>
+        <li style="--v:0"   data-label="paused"><span class="bar"></span></li>
+        <li style="--v:0"   data-label="paused"><span class="bar"></span></li>
+        <li style="--v:0"   data-label="paused"><span class="bar"></span></li>
+        <li style="--v:10"  data-label="playing"><span class="bar"></span><span class="bar-value">10</span></li>
+        <li style="--v:10"  data-label="playing"><span class="bar"></span></li>
+        <li style="--v:10"  data-label="playing"><span class="bar"></span></li>
+        <li style="--v:0"   data-label="playing"><span class="bar"></span></li>
+        <li style="--v:50"  data-label="playing" class="is-accent"><span class="bar"></span><span class="bar-value">50</span></li>
+        <li style="--v:0"   data-label="playing"><span class="bar"></span></li>
+        <li style="--v:0"   data-label="paused"><span class="bar"></span></li>
+        <li style="--v:10"  data-label="paused"><span class="bar"></span></li>
+      </ol>
+    </figure>
+  </section>
+
+  <section class="fields" id="install" aria-labelledby="install-title">
+    <div class="field f1">
+      <h2 id="install-title" class="field-heading" data-reveal>Install in a minute</h2>
+      <div class="card" data-ui>
+        <div class="card-finder">
+          <div class="card-item"><img src="assets/icon-512.png" width="56" height="56" alt="" loading="lazy"><span>LyricPill</span></div>
+          <span class="finder-arrow">→</span>
+          <div class="card-item"><span class="folder"></span><span>Applications</span></div>
+        </div>
+      </div>
+      <p class="clause" data-reveal>First, drag it to Applications.</p>
+    </div>
+    <div class="field f2">
+      <div class="card" data-ui>
+        <div class="card-sheet">
+          <p class="sheet-title">“LyricPill” was blocked to protect your Mac.</p>
+          <p class="sheet-text">Open it from Privacy &amp; Security. macOS asks once.</p>
+          <div class="sheet-buttons"><span class="btn">Done</span><span class="btn is-primary">Open Anyway</span></div>
+        </div>
+      </div>
+      <p class="clause" data-reveal>Then open it once from Privacy &amp; Security.</p>
+    </div>
+    <div class="field f3">
+      <div class="card" data-ui>
+        <div class="card-sheet">
+          <p class="sheet-title">“LyricPill” would like to control “Spotify”.</p>
+          <p class="sheet-text">Reads the current track and playback position to display synced lyrics.</p>
+          <div class="sheet-buttons"><span class="btn">Don’t Allow</span><span class="btn is-primary">Allow</span></div>
+        </div>
+      </div>
+      <p class="clause" data-reveal>Then play a song and allow it to read Spotify.</p>
+    </div>
+    <div class="field f4">
+      <div class="card" data-ui>
+        <div class="card-desk"><img src="assets/pill.png" width="310" height="40" alt="The pill showing a lyric line" loading="lazy"></div>
+      </div>
+      <p class="clause" data-reveal>Then the line is there.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="tiles" id="privacy" aria-labelledby="footer-title">
+  <h2 id="footer-title" class="sr-only">Privacy and links</h2>
+  <div class="tile t-statement">
+    <p class="tile-statement">Only the song’s artist, title, album and length leave your Mac, to lrclib.net, to find the lyrics. No account, no telemetry.</p>
+    <p class="small muted">MIT licence · Not affiliated with Spotify · Lyrics from lrclib.net</p>
+  </div>
+  <div class="tile t-nav">
+    <ul class="tile-links">
+      <li><a href="https://github.com/theranjithjayaram/lyric-pill">GitHub</a></li>
+      <li><a href="https://github.com/theranjithjayaram/lyric-pill/releases">Releases</a></li>
+      <li><a href="https://github.com/theranjithjayaram/lyric-pill/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://github.com/theranjithjayaram/lyric-pill/blob/main/PRIVACY.md">Privacy</a></li>
+      <li><a href="https://github.com/theranjithjayaram/lyric-pill/blob/main/SECURITY.md">Security</a></li>
+    </ul>
+  </div>
+  <div class="tile t-version">
+    <p id="version-tile">Version 1.0.0, 24 October 2026.</p>
+    <p class="muted">macOS 13 or later, Apple silicon and Intel. Signed, not notarized.</p>
+  </div>
+  <div class="tile t-issue">
+    <a class="tile-link" href="https://github.com/theranjithjayaram/lyric-pill/issues/new/choose">Report an issue</a>
+  </div>
+  <div class="tile t-wordmark"><p class="wordmark-big">LyricPill</p></div>
+  <a class="tile t-download" id="download-footer" href="https://github.com/theranjithjayaram/lyric-pill/releases/latest">
+    <span class="tile-invite">Download for Mac</span>
+    <svg class="tile-arrow" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M8 24h30M26 12l12 12-12 12" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square"/></svg>
+  </a>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>
