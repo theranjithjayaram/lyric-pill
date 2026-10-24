@@ -5,8 +5,8 @@
 #
 # PATH is LyricPill.app (submitted as a zip, stapled in place — run this before
 # make-dmg.sh so the app inside the DMG carries its own ticket and opens
-# offline) or the finished .dmg. Stapling changes the file, so a .sha256 next
-# to a DMG is rewritten. APPLE_APP_PASSWORD is an app-specific password
+# offline) or the finished .dmg. Stapling changes the file: compute any
+# checksum after this step. APPLE_APP_PASSWORD is an app-specific password
 # (appleid.apple.com). Needs notarytool/stapler from Xcode; the release
 # workflow runs this on CI.
 set -euo pipefail
@@ -59,9 +59,5 @@ case "$TARGET" in
         ;;
     *.dmg)
         spctl --assess --type open --context context:primary-signature -v "$TARGET"
-        if [ -f "$TARGET.sha256" ]; then
-            (cd "$(dirname "$TARGET")" && shasum -a 256 "$(basename "$TARGET")" > "$(basename "$TARGET").sha256")
-            echo "==> Rewrote $(basename "$TARGET").sha256 (stapling changed the DMG)"
-        fi
         ;;
 esac

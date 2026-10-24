@@ -61,4 +61,14 @@ func lrcParserTests(_ t: TestReporter) {
             LrcLine(ms: 9050, text: "The sky is clear"),
         ],
         "parser: duplicate-timestamp bilingual pairs keep order")
+
+    // Non-ASCII digits are not a timestamp (ICU's \d would match them; Int() can't parse them).
+    t.expect(LrcParser.parse("[٠١:٠٢.٠٠] not a timestamp\n[00:05.00] a line") ==
+             [LrcLine(ms: 5000, text: "a line")],
+             "parser: arabic-indic digits are skipped, not crashed on")
+
+    // serialize/parse round-trip (used by the translation cache)
+    let lines = [LrcLine(ms: 0, text: "a"), LrcLine(ms: 62345, text: "line two")]
+    t.expect(LrcParser.parse(LrcParser.serialize(lines)) == lines,
+             "serialize: round-trips through the parser")
 }

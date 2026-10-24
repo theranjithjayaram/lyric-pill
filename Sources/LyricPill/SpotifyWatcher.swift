@@ -19,7 +19,7 @@ final class SpotifyWatcher {
     /// Last Apple-events failure (e.g. Automation permission denied), for the menu.
     private(set) var lastError: String?
 
-    private static let spotifyBundleId = "com.spotify.client"
+    static let spotifyBundleId = "com.spotify.client"
     private static let playbackChangedName = Notification.Name("com.spotify.client.PlaybackStateChanged")
 
     // Compiled once and reused. Numbers are returned as raw descriptors (not
@@ -43,9 +43,12 @@ final class SpotifyWatcher {
         end tell
         """)!
 
-    var isSpotifyRunning: Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: Self.spotifyBundleId).isEmpty
+    /// Spotify's running instance, if any — the one target Apple events may go to.
+    static var runningSpotify: NSRunningApplication? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: spotifyBundleId).first
     }
+
+    var isSpotifyRunning: Bool { Self.runningSpotify != nil }
 
     func start() {
         DistributedNotificationCenter.default().addObserver(

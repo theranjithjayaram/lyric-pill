@@ -1,25 +1,17 @@
 #!/usr/bin/env bash
-# Remove LyricPill: the app, its lyric cache, its settings, and any legacy LaunchAgent.
+# Remove LyricPill: the app, its lyric cache and its settings.
 set -euo pipefail
 
-BUNDLE_ID="io.github.theranjithjayaram.lyric-pill"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw -o - "$REPO/app/Info.plist")"
+APP_NAME="LyricPill.app"
 PROCESS_PATTERN='LyricPill.app/Contents/MacOS/LyricPill'
 
 echo "==> Quitting LyricPill"
 pkill -f "$PROCESS_PATTERN" 2>/dev/null || true
 
-for label in "$BUNDLE_ID" local.spotify-lyrics-overlay; do
-    plist="$HOME/Library/LaunchAgents/$label.plist"
-    [ -f "$plist" ] || continue
-    echo "==> Removing legacy LaunchAgent $label"
-    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || launchctl unload "$plist" 2>/dev/null || true
-    rm -f "$plist"
-done
-
 echo "==> Removing the app, cache and settings"
-rm -rf "/Applications/LyricPill.app" "$HOME/Applications/LyricPill.app" \
-       "$HOME/Applications/SpotifyLyricsOverlay.app"
-rm -rf "$HOME/Library/Caches/lyric-pill" "$HOME/Library/Caches/spotify-lyrics-overlay"
+rm -rf "/Applications/$APP_NAME" "$HOME/Applications/$APP_NAME" "$HOME/Library/Caches/lyric-pill"
 defaults delete "$BUNDLE_ID" 2>/dev/null || true
 
 echo

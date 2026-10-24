@@ -5,6 +5,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `install.sh` builds only the Mac's own architecture (the DMG stays universal) and no longer
+  migrates pre-1.0 source installs.
+- Translation planning is skipped for already-translated replays, and a queued translation whose
+  track has already changed is dropped before the model runs.
+
+### Fixed
+- Settings → Translation: the *Translate from* switches now line up in one column.
+- `--simulate` with an unreadable file exits 1 (was 0); a debug flag given without its value is
+  reported instead of silently ignored.
+
 ## [1.0.0] — 2026-10-23
 
 First public release.

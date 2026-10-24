@@ -13,7 +13,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUNDLE_ID="io.github.theranjithjayaram.lyric-pill"
+# Info.plist is the one place the bundle id is defined.
+BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw -o - "$REPO/app/Info.plist")"
 
 VERSION="$(tr -d '[:space:]' < "$REPO/VERSION")"
 BUILD_NUMBER=""

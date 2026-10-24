@@ -18,7 +18,6 @@ enum SpotifyAutomation {
         }
     }
 
-    private static let spotifyBundleId = "com.spotify.client"
     private static let settingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!
 
@@ -29,9 +28,7 @@ enum SpotifyAutomation {
         // descriptor makes AEDeterminePermissionToAutomateTarget block forever
         // (measured: PID form answers in ~50 ms, bundle-id form never returns).
         // A non-running Spotify is answered here, so nothing can launch it.
-        guard let spotify = NSRunningApplication
-                .runningApplications(withBundleIdentifier: spotifyBundleId).first
-        else {
+        guard let spotify = SpotifyWatcher.runningSpotify else {
             completion(.spotifyNotRunning)
             return
         }

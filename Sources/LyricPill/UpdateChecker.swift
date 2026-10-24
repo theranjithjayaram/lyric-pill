@@ -6,6 +6,8 @@ enum AppInfo {
     static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     static let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
     static let repoURL = URL(string: "https://github.com/theranjithjayaram/lyric-pill")!
+    /// The one identity the app sends over HTTP, in the form lrclib asks for.
+    static let userAgent = "lyric-pill/\(version) (\(repoURL.absoluteString))"
 }
 
 /// On-demand check against the repo's latest GitHub release. Never automatic:
@@ -36,7 +38,7 @@ enum UpdateChecker {
     static func check(currentVersion: String, completion: @escaping (Result<Outcome, Error>) -> Void) {
         var request = URLRequest(url: latestReleaseURL, timeoutInterval: 15)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("lyric-pill/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue(AppInfo.userAgent, forHTTPHeaderField: "User-Agent")
         // Ephemeral: no cookie jar, no CFNetwork disk cache for a one-off GET.
         let session = URLSession(configuration: .ephemeral)
         let task = session.dataTask(with: request) { data, response, error in
@@ -72,6 +74,7 @@ enum UpdateChecker {
     /// Shows the result as an alert; "Download" opens the release page.
     static func present(_ result: Result<Outcome, Error>, currentVersion: String) {
         let alert = NSAlert()
+        var downloadURL: URL?
         switch result {
         case .success(.upToDate(let version)):
             alert.messageText = "LyricPill \(version) is up to date."
@@ -80,10 +83,7 @@ enum UpdateChecker {
             alert.messageText = "LyricPill \(version) is available (you have \(currentVersion))."
             alert.addButton(withTitle: "Download")
             alert.addButton(withTitle: "Later")
-            if alert.runModal() == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(url)
-            }
-            return
+            downloadURL = url
         case .success(.noReleases):
             alert.messageText = "No releases have been published yet."
             alert.addButton(withTitle: "OK")
@@ -93,6 +93,8 @@ enum UpdateChecker {
             alert.alertStyle = .warning
             alert.addButton(withTitle: "OK")
         }
-        alert.runModal()
+        if alert.runModal() == .alertFirstButtonReturn, let downloadURL {
+            NSWorkspace.shared.open(downloadURL)
+        }
     }
 }
